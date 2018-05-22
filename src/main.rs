@@ -1,38 +1,77 @@
+extern crate byteorder;
+extern crate clap;
 extern crate fst;
-#[macro_use]
-extern crate serde;
 extern crate serde_json;
 extern crate tantivy;
 
+use byteorder::{ReadBytesExt, LittleEndian};
 use fst::Automaton;
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
-use std::env;
 use std::path::Path;
 use tantivy::Index;
 use tantivy::Result;
 use tantivy::schema::FieldType;
 use tantivy::schema::Type;
 use tantivy::termdict::TermStreamer;
+use clap::App;
+use clap::Arg;
+use clap::SubCommand;
+use tantivy::Term;
+use tantivy::schema::Schema;
+use tantivy::schema::Field;
 
 fn main() {
-    let args = env::args().collect::<Vec<_>>();
-    let index_path = Path::new(&args[1]);
-    main_inner(&index_path).unwrap();
+    main_inner().unwrap();
 }
 
-fn main_inner(index_path: &Path) -> Result<()> {
+fn main_inner() -> Result<()> {
+    let matches = App::new("tantivy-viewer")
+        .arg(Arg::with_name("index")
+            .index(1)
+            .takes_value(true)
+            .required(true))
+        .subcommand(SubCommand::with_name("fields"))
+        .subcommand(SubCommand::with_name("topterms")
+            .arg(Arg::with_name("field")
+                .takes_value(true)
+                .required(true)
+                .index(1))
+            .arg(Arg::with_name("k")
+                .takes_value(true)
+                .default_value("10")))
+        .get_matches();
+    let index_path = Path::new(matches.value_of("index").unwrap());
     let index = Index::open(index_path)?;
+    match matches.subcommand() {
+        ("fields", _) => {
+            let fields = get_fields(&index)?;
+            println!("{:#?}", fields);
+        }
+        ("topterms", Some(sub_args)) => {
+            let field = sub_args.value_of("field").unwrap();
+            let k = sub_args.value_of("k").unwrap().parse::<usize>().expect("invalid 'k' value provided.");
+            let top_terms = top_terms(&index, field.to_string(), k)?;
+            for term in top_terms.terms.into_iter() {
+                eprintln!("term = {:?}", term);
+            }
+        }
+        (ref command, _) => {
+            println!("Unknown sub-command!: {}", command);
+        }
+    }
     Ok(())
 }
 
+#[derive(Debug)]
 struct Fields {
     fields: HashMap<String, FieldDescriptor>,
 }
 
+#[derive(Debug)]
 struct FieldDescriptor {
     name: String,
     value_type: Type,
@@ -66,8 +105,35 @@ fn get_fields(index: &Index) -> Result<Fields> {
     Ok(Fields { fields })
 }
 
+#[derive(Debug)]
 struct TopTerms {
-    terms: Vec<(usize, Vec<u8>)>,
+    terms: Vec<TermCount>,
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct TermCount {
+    count: i64,
+    term: TantivyValue,
+}
+
+#[derive(Eq, PartialEq, PartialOrd, Ord, Debug)]
+enum TantivyValue {
+    I64(i64),
+    U64(u64),
+    Text(String),
+}
+
+impl TantivyValue {
+    fn from_term(key: &[u8], ty: Type) -> TantivyValue {
+        let term = Term::from_field_text(Field(0), unsafe { std::str::from_utf8_unchecked(key) });
+        match ty {
+            Type::Str => TantivyValue::Text(term.text().to_string()),
+            Type::U64 => TantivyValue::U64(term.get_u64()),
+            Type::I64 => TantivyValue::I64(term.get_i64()),
+            Type::HierarchicalFacet => unimplemented!(),
+            Type::Bytes => unimplemented!(),
+        }
+    }
 }
 
 struct StreamerWrapper<'a, A: Automaton> {
@@ -97,6 +163,7 @@ impl<'a, A: Automaton> Eq for StreamerWrapper<'a, A> {}
 fn top_terms(index: &Index, field: String, k: usize) -> Result<TopTerms> {
     let searcher = index.searcher();
     let field = index.schema().get_field(&field).ok_or("Sorry, that field does not exist!")?;
+    let value_type = index.schema().get_field_entry(field).field_type().value_type();
     let indexes = searcher.segment_readers().iter().map(|x| x.inverted_index(field)).collect::<Vec<_>>();
 
     let mut streams = indexes.iter().filter_map(|x| {
@@ -128,15 +195,16 @@ fn top_terms(index: &Index, field: String, k: usize) -> Result<TopTerms> {
         }
 
         if pq.len() < k {
-            pq.push((-count, current_key));
-        } else if pq.peek().unwrap().0 < -count {
-            *pq.peek_mut().unwrap() = (-count, current_key);
+            pq.push(TermCount { count: -count, term: TantivyValue::from_term(&current_key[..], value_type) });
+        } else if pq.peek().unwrap().count > -count {
+            *pq.peek_mut().unwrap() = TermCount { count: -count, term: TantivyValue::from_term(&current_key[..], value_type) };
         }
     }
 
     let mut vec = Vec::new();
-    while let Some((neg_count, term)) = pq.pop() {
-        vec.push(((-neg_count) as usize, term));
+    while let Some(mut termcount) = pq.pop() {
+        termcount.count = -termcount.count;
+        vec.push(termcount);
     }
     vec.reverse();
 
