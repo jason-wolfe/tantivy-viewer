@@ -30,15 +30,18 @@ pub fn reconstruct(index: &Index, field: &str, target_segment: &str, doc: DocId)
             let mut segment_postings = index.read_postings_from_terminfo(term_stream.value(), options);
             if let SkipResult::Reached = segment_postings.skip_next(doc) {
                 segment_postings.positions(&mut positions_buf);
+                let value = TantivyValue::from_term(term_stream.key(), field_type);
                 if let Some(last) = positions_buf.pop() {
                     if last as usize >= reconstructed.len() {
                         reconstructed.resize(last as usize + 1, None);
                     }
                     positions_buf.push(last);
                 } else {
+                    for _ in 0..segment_postings.term_freq() {
+                        reconstructed.push(Some(value.clone()));
+                    }
                     continue;
                 }
-                let value = TantivyValue::from_term(term_stream.key(), field_type);
                 for position in positions_buf.drain(..) {
                     reconstructed[position as usize] = Some(value.clone());
                 }
