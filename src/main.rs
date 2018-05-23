@@ -75,7 +75,7 @@ fn main_inner() -> Result<()> {
             let doc = sub_args.value_of("doc").unwrap().parse::<u32>().expect("Invalid 'doc' value provided.");
             let reconstructed = reconstruct(&index, field, segment, doc)?;
             for value in reconstructed.into_iter().filter_map(|x| x) {
-                print!("{:?} ", value);
+                print!("{} ", value);
             }
         }
         ("topterms", Some(sub_args)) => {

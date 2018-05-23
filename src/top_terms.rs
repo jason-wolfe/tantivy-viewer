@@ -4,6 +4,7 @@ use tantivy::schema::Field;
 use fst::Automaton;
 use tantivy::termdict::TermStreamer;
 use std::cmp::Ordering;
+use std::fmt;
 use std::str;
 use tantivy::Index;
 use tantivy::Result;
@@ -26,6 +27,16 @@ pub enum TantivyValue {
     I64(i64),
     U64(u64),
     Text(String),
+}
+
+impl fmt::Display for TantivyValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TantivyValue::I64(val) => val.fmt(f),
+            TantivyValue::U64(val) => val.fmt(f),
+            TantivyValue::Text(ref val) => val.fmt(f),
+        }
+    }
 }
 
 impl TantivyValue {
