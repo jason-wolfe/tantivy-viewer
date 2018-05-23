@@ -86,7 +86,7 @@ fn main_inner() -> Result<()> {
                 println!("{:?}", term);
             }
         }
-        ("term_docs", Some(sub_args)) => {
+        ("termdocs", Some(sub_args)) => {
             let field = sub_args.value_of("field").unwrap();
             let term_str = sub_args.value_of("term").unwrap();
             let docs = term_docs(&index, field, term_str)?;
