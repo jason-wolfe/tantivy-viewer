@@ -1,17 +1,9 @@
-extern crate byteorder;
 extern crate clap;
-extern crate fst;
-extern crate serde_json;
 extern crate tantivy;
 
-mod fields;
-use fields::get_fields;
-mod reconstruct;
-use reconstruct::reconstruct;
-mod top_terms;
-use top_terms::top_terms;
-mod term_docs;
-use term_docs::term_docs;
+extern crate tantivy_viewer;
+
+use tantivy_viewer::{get_fields, reconstruct, top_terms, term_docs};
 
 use std::path::Path;
 use tantivy::Index;
