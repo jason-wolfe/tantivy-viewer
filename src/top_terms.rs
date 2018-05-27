@@ -58,7 +58,7 @@ struct StreamerWrapper<'a, A: Automaton> {
 
 impl<'a, A: Automaton> Ord for StreamerWrapper<'a, A> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.streamer.key().cmp(&other.streamer.key())
+        self.streamer.key().cmp(&other.streamer.key()).reverse()
     }
 }
 
