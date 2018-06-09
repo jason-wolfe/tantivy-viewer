@@ -49,6 +49,10 @@ via `cargo install`.
 Run the `tantivy-viewer-web` executable with an argument pointing to 
 your tantivy directory, and a server will be started on localhost:3000.
 
+```
+➜  ./target/debug/tantivy-viewer-web /tmp/my_index
+```
+
 Point your browser to [http://localhost:3000/](http://localhost:3000/)
 to start exploring! 
 
