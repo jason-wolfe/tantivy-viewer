@@ -1,0 +1,23 @@
+<html>
+<head></head>
+<body>
+<h1>Documents with Term {{term}} in {{field}}</h1>
+<table>
+    <thead>
+    <tr>
+        <th>Doc</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    {{#each term_docs}}
+        <tr>
+            <td>
+                <a href="reconstruct?field={{../field}}&segment={{this.segment}}&doc={{this.doc}}">({{this.doc}}, {{this.segment}})</a>
+            </td>
+        </tr>
+    {{/each}}
+    </tbody>
+</table>
+</body>
+</html>

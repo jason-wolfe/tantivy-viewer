@@ -73,7 +73,7 @@ fn main_inner() -> Result<()> {
         ("topterms", Some(sub_args)) => {
             let field = sub_args.value_of("field").unwrap();
             let k = sub_args.value_of("k").unwrap().parse::<usize>().expect("invalid 'k' value provided.");
-            let top_terms = top_terms(&index, field.to_string(), k)?;
+            let top_terms = top_terms(&index, field, k)?;
             for term in top_terms.terms.into_iter() {
                 println!("{:?}", term);
             }

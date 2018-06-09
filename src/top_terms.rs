@@ -18,8 +18,8 @@ pub struct TopTerms {
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct TermCount {
-    count: i64,
-    term: TantivyValue,
+    pub count: i64,
+    pub term: TantivyValue,
 }
 
 #[derive(Eq, PartialEq, PartialOrd, Ord, Debug, Clone)]
@@ -76,9 +76,9 @@ impl<'a, A: Automaton> PartialEq for StreamerWrapper<'a, A> {
 
 impl<'a, A: Automaton> Eq for StreamerWrapper<'a, A> {}
 
-pub fn top_terms(index: &Index, field: String, k: usize) -> Result<TopTerms> {
+pub fn top_terms(index: &Index, field: &str, k: usize) -> Result<TopTerms> {
     let searcher = index.searcher();
-    let field = index.schema().get_field(&field).ok_or("Sorry, that field does not exist!")?;
+    let field = index.schema().get_field(field).ok_or("Sorry, that field does not exist!")?;
     let value_type = index.schema().get_field_entry(field).field_type().value_type();
     let indexes = searcher.segment_readers().iter().map(|x| x.inverted_index(field)).collect::<Vec<_>>();
 
