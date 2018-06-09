@@ -6,5 +6,8 @@
     <h2>{{field}}</h2>
     {{contents}}
 {{/each}}
+{{#unless all_fields}}
+    <h2><a href="reconstruct?segment={{segment}}&doc={{doc}}">Reconstruct all fields</a></h2>
+{{/unless}}
 </body>
 </html>

@@ -236,6 +236,7 @@ struct ReconstructEntry {
 struct ReconstructData {
     segment: String,
     doc: DocId,
+    all_fields: bool,
     entries: Vec<ReconstructEntry>,
 }
 
@@ -249,6 +250,7 @@ impl Handler for ReconstructHandler {
         let doc: DocId = get_parameter(params, &["doc"])?;
 
         let mut fields = Vec::new();
+        let all_fields = field.is_none();
         if let Some(field) = field {
             // Reconstruct a specific field
             fields.push(field);
@@ -278,6 +280,7 @@ impl Handler for ReconstructHandler {
         let data = ReconstructData {
             segment,
             doc,
+            all_fields,
             entries: all_reconstructed,
         };
 
