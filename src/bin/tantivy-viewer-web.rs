@@ -115,8 +115,6 @@ impl Handler for FieldDetailsHandler {
             .collect::<Result<Vec<_>>>()
             .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
 
-        eprintln!("field_details = {:?}", field_details);
-
         field_details.sort_unstable_by_key(|x| x.name.clone());
 
         let mut response = Response::new();
