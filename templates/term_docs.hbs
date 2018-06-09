@@ -17,6 +17,9 @@
             </td>
         </tr>
     {{/each}}
+    {{#if truncated}}
+        <tr><td>[...Truncated...]</td></tr>
+    {{/if}}
     </tbody>
 </table>
 </body>

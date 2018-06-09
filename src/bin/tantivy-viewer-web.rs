@@ -138,6 +138,7 @@ struct TermDocsData {
     field: String,
     term: String,
     term_docs: Vec<DocAddress>,
+    truncated: bool,
 }
 
 impl Handler for TermDocsHandler {
@@ -151,14 +152,20 @@ impl Handler for TermDocsHandler {
         let term_docs = tantivy_viewer::term_docs(&*self.index, &field, &term)
             .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
 
+        let num_docs = term_docs.len();
+
         let term_docs = term_docs.into_iter()
             .map(|x| DocAddress { doc: x.1, segment: x.0.short_uuid_string() })
-            .collect();
+            .take(1000)
+            .collect::<Vec<_>>();
+
+        let truncated = num_docs > term_docs.len();
 
         let term_docs_data = TermDocsData {
             field,
             term,
-            term_docs
+            term_docs,
+            truncated,
         };
 
         let mut response = Response::new();
