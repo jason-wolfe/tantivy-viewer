@@ -27,6 +27,31 @@ pub enum TantivyValue {
     I64(i64),
     U64(u64),
     Text(String),
+    Bytes(Vec<u8>),
+}
+
+impl From<i64> for TantivyValue {
+    fn from(value: i64) -> Self {
+        TantivyValue::I64(value)
+    }
+}
+
+impl From<u64> for TantivyValue {
+    fn from(value: u64) -> Self {
+        TantivyValue::U64(value)
+    }
+}
+
+impl From<String> for TantivyValue {
+    fn from(value: String) -> Self {
+        TantivyValue::Text(value)
+    }
+}
+
+impl From<Vec<u8>> for TantivyValue {
+    fn from(value: Vec<u8>) -> Self {
+        TantivyValue::Bytes(value)
+    }
 }
 
 impl fmt::Display for TantivyValue {
@@ -35,6 +60,7 @@ impl fmt::Display for TantivyValue {
             TantivyValue::I64(val) => val.fmt(f),
             TantivyValue::U64(val) => val.fmt(f),
             TantivyValue::Text(ref val) => val.fmt(f),
+            TantivyValue::Bytes(ref val) => write!(f, "[{} bytes]", val.len()),
         }
     }
 }
