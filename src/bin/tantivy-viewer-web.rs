@@ -1,3 +1,5 @@
+#![feature(transpose_result)]
+
 extern crate env_logger;
 extern crate handlebars;
 extern crate handlebars_iron;
@@ -49,6 +51,16 @@ impl fmt::Display for UrlParameterError {
 
 impl error::Error for UrlParameterError {
 
+}
+
+fn get_optional_parameter<T: params::FromValue>(params: &params::Map, key: &[&str]) -> IronResult<Option<T>> {
+    use UrlParameterError::*;
+    params
+        .find(key)
+        .map(|param_value|
+            <T>::from_value(param_value)
+                .ok_or_else(|| IronError::new(InvalidParameter { key: key.iter().map(|x| x.to_string()).collect() }, iron::status::BadRequest)))
+        .transpose()
 }
 
 fn get_parameter<T: params::FromValue>(params: &params::Map, key: &[&str]) -> IronResult<T> {
@@ -227,27 +239,41 @@ impl Handler for ReconstructHandler {
         use params::{Params};
         let params = req.get_ref::<Params>().unwrap();
 
-        let field: String = get_parameter(params, &["field"])?;
+        let field: Option<String> = get_optional_parameter(params, &["field"])?;
         let segment: String = get_parameter(params, &["segment"])?;
         let doc: DocId = get_parameter(params, &["doc"])?;
 
-        let reconstructed =
-            tantivy_viewer::reconstruct(&*self.index, &field, &segment, doc)
-                .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+        let mut fields = Vec::new();
+        if let Some(field) = field {
+            // Reconstruct a specific field
+            fields.push(field);
+        } else {
+            // Reconstruct all fields
+            let schema = self.index.schema();
+            fields.extend(schema.fields().iter().map(|x| x.name().to_string()));
+        }
 
-        let contents = reconstructed.into_iter()
-            .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
-            .collect::<String>();
+        fields.sort();
 
-        let reconstructed = ReconstructData {
-            field,
-            segment,
-            doc,
-            contents,
-        };
+        let mut all_reconstructed = Vec::new();
+
+        for field in fields {
+            let reconstructed =
+                tantivy_viewer::reconstruct(&*self.index, &field, &segment, doc)
+                    .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+
+            all_reconstructed.push(ReconstructData {
+                field,
+                segment: segment.clone(),
+                doc,
+                contents: reconstructed.into_iter()
+                    .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
+                    .collect::<String>()
+            });
+        }
 
         let mut response = Response::new();
-        response.set_mut(Template::new("reconstruct", reconstructed)).set_mut(iron::status::Ok);
+        response.set_mut(Template::new("reconstruct", all_reconstructed)).set_mut(iron::status::Ok);
         Ok(response)
     }
 }
