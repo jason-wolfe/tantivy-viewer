@@ -227,11 +227,16 @@ struct ReconstructHandler {
 }
 
 #[derive(Serialize)]
-struct ReconstructData {
+struct ReconstructEntry {
     field: String,
+    contents: String,
+}
+
+#[derive(Serialize)]
+struct ReconstructData {
     segment: String,
     doc: DocId,
-    contents: String,
+    entries: Vec<ReconstructEntry>,
 }
 
 impl Handler for ReconstructHandler {
@@ -262,18 +267,22 @@ impl Handler for ReconstructHandler {
                 tantivy_viewer::reconstruct(&*self.index, &field, &segment, doc)
                     .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
 
-            all_reconstructed.push(ReconstructData {
+            all_reconstructed.push(ReconstructEntry {
                 field,
-                segment: segment.clone(),
-                doc,
                 contents: reconstructed.into_iter()
                     .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
                     .collect::<String>()
             });
         }
 
+        let data = ReconstructData {
+            segment,
+            doc,
+            entries: all_reconstructed,
+        };
+
         let mut response = Response::new();
-        response.set_mut(Template::new("reconstruct", all_reconstructed)).set_mut(iron::status::Ok);
+        response.set_mut(Template::new("reconstruct", data)).set_mut(iron::status::Ok);
         Ok(response)
     }
 }

@@ -1,8 +1,9 @@
 <html>
 <head></head>
 <body>
-{{#each this}}
-    <h1>Reconstruction of {{field}} in document ({{segment}}, {{doc}})</h1>
+<h1>Reconstruction of document ({{segment}}, {{doc}})</h1>
+{{#each entries}}
+    <h2>{{field}}</h2>
     {{contents}}
 {{/each}}
 </body>
