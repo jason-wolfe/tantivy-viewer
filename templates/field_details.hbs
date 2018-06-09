@@ -1,0 +1,25 @@
+<html>
+<head></head>
+<body>
+<h1>Field Details</h1>
+<table>
+    <thead>
+    <tr>
+        <th>Field</th>
+        <th>Type</th>
+        <th>Extra options</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    {{#each this}}
+        <tr>
+            <td><a href="top_terms?field={{name}}">{{name}}</a></td>
+            <td>{{value_type}}</td>
+            <td>{{extra_options}}</td>
+        </tr>
+    {{/each}}
+    </tbody>
+</table>
+</body>
+</html>

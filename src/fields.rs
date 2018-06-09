@@ -8,14 +8,14 @@ use serde_json;
 
 #[derive(Debug)]
 pub struct Fields {
-    fields: HashMap<String, FieldDescriptor>,
+    pub fields: HashMap<String, FieldDescriptor>,
 }
 
 #[derive(Debug)]
 pub struct FieldDescriptor {
-    name: String,
-    value_type: Type,
-    extra_options: Value,
+    pub name: String,
+    pub value_type: Type,
+    pub extra_options: Value,
 }
 
 fn field_options(field_type: &FieldType) -> Result<Value> {

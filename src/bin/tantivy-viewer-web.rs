@@ -1,3 +1,4 @@
+extern crate env_logger;
 extern crate handlebars;
 extern crate handlebars_iron;
 extern crate iron;
@@ -87,6 +88,43 @@ impl Handler for IndexHandler {
     }
 }
 
+struct FieldDetailsHandler {
+    index: Arc<Index>,
+}
+
+#[derive(Debug, Serialize)]
+struct FieldDetail {
+    name: String,
+    value_type: String,
+    extra_options: String,
+}
+
+impl Handler for FieldDetailsHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        let fields = tantivy_viewer::get_fields(&*self.index)
+            .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+
+        let mut field_details = fields
+            .fields
+            .into_iter()
+            .map(|(_k, v)| Ok(FieldDetail {
+                name: v.name,
+                value_type: format!("{:?}", v.value_type),
+                extra_options: serde_json::to_string(&v.extra_options)?
+            }))
+            .collect::<Result<Vec<_>>>()
+            .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+
+        eprintln!("field_details = {:?}", field_details);
+
+        field_details.sort_unstable_by_key(|x| x.name.clone());
+
+        let mut response = Response::new();
+        response.set_mut(Template::new("field_details", field_details)).set_mut(iron::status::Ok);
+        Ok(response)
+    }
+}
+
 struct TopTermsHandler {
     index: Arc<Index>,
 }
@@ -108,7 +146,7 @@ impl Handler for TopTermsHandler {
         use params::{Params};
         let params = req.get_ref::<Params>().unwrap();
         let field: String = get_parameter(params, &["field"])?;
-        let k = get_parameter(params, &["k"])?;
+        let k = get_parameter(params, &["k"]).unwrap_or(100);
         let top_terms = tantivy_viewer::top_terms(&*self.index, &field, k).unwrap();
         let data = TopTermsData {
             field,
@@ -218,6 +256,8 @@ impl Handler for ReconstructHandler {
 
 
 fn main() -> Result<()> {
+    env_logger::init();
+
     let args = env::args().collect::<Vec<_>>();
     let index = Arc::new(Index::open(&args[1]).unwrap());
 
@@ -228,6 +268,7 @@ fn main() -> Result<()> {
 
     let mut router = Router::new();
     router.get("/", IndexHandler { index: index.clone() }, "index");
+    router.get("/field_details", FieldDetailsHandler { index: index.clone() }, "field_details");
     router.get("/top_terms", TopTermsHandler { index: index.clone() }, "top_terms");
     router.get("/term_docs", TermDocsHandler { index: index.clone() }, "term_docs");
     router.get("/reconstruct", ReconstructHandler { index: index.clone() }, "reconstruct");

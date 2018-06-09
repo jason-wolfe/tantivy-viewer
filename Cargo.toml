@@ -5,6 +5,7 @@ version = "0.1.0"
 [dependencies]
 byteorder = "1.2.3"
 clap = "2.31.2"
+env_logger = "0.5.10"
 fst = "0.3.0"
 handlebars = "0.32.4"
 handlebars-iron = "0.26.2"
