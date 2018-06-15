@@ -1,24 +1,21 @@
-<html>
-<head></head>
-<body>
+{{#*inline "contents"}}
+    <h1>Top Terms in {{field}}</h1>
 
-<h1>Top Terms in {{field}}</h1>
-
-<table>
-    <thead>
-    <tr>
-        <th>Term</th>
-        <th>Count</th>
-    </tr>
-    </thead>
-    <tbody>
-    {{#each terms}}
+    <table>
+        <thead>
         <tr>
-            <td>{{this.term}}</td>
-            <td><a href="term_docs?field={{../field}}&term={{this.term}}">{{this.count}}</a></td>
+            <th>Term</th>
+            <th>Count</th>
         </tr>
-    {{/each}}
-    </tbody>
-</table>
-</body>
-</html>
+        </thead>
+        <tbody>
+        {{#each terms}}
+            <tr>
+                <td>{{this.term}}</td>
+                <td><a href="term_docs?field={{../field}}&term={{this.term}}">{{this.count}}</a></td>
+            </tr>
+        {{/each}}
+        </tbody>
+    </table>
+{{/inline}}
+{{~> skeleton~}}

@@ -1,53 +1,48 @@
-<html>
-<head></head>
-<body>
+{{#*inline "contents"}}
+    <ul>
+        <li>
+            <a href="field_details">Detailed Field Information</a>
+        </li>
 
-<h1>Tantivy Viewer</h1>
+        <li>
+            <form action="top_terms">
+                Top Terms
+                <br/>
+                {{> field_picker fields=fields name="field" }}
+                <label>
+                    K:
+                    <input type="number" name="k" value="100">
+                </label>
+                <input type="submit" value="Top Terms">
+            </form>
+        </li>
 
-<ul>
-    <li>
-        <a href="field_details">Detailed Field Information</a>
-    </li>
+        <li>
+            <form action="term_docs">
+                Term Docs
+                <br/>
+                {{> field_picker fields=fields name="field"}}
+                <label>
+                    Term:
+                    <input type="text" name="term">
+                </label>
+                <input type="submit" value="Term Docs">
+            </form>
+        </li>
 
-    <li>
-        <form action="top_terms">
-            Top Terms
-            <br/>
-            {{> field_picker fields=fields name="field" }}
-            <label>
-                K:
-                <input type="number" name="k" value="100">
-            </label>
-            <input type="submit" value="Top Terms">
-        </form>
-    </li>
-
-    <li>
-        <form action="term_docs">
-            Term Docs
-            <br/>
-            {{> field_picker fields=fields name="field"}}
-            <label>
-                Term:
-                <input type="text" name="term">
-            </label>
-            <input type="submit" value="Term Docs">
-        </form>
-    </li>
-
-    <li>
-        <form action="reconstruct">
-            Reconstruct
-            <br/>
-            {{> field_picker fields=fields name="field"}}
-            {{> segment_picker segments=segments name="segment"}}
-            <label>
-                Doc:
-                <input type="number" name="doc">
-            </label>
-            <input type="submit" value="Reconstruct">
-        </form>
-    </li>
-</ul>
-</body>
-</html>
+        <li>
+            <form action="reconstruct">
+                Reconstruct
+                <br/>
+                {{> field_picker fields=fields name="field"}}
+                {{> segment_picker segments=segments name="segment"}}
+                <label>
+                    Doc:
+                    <input type="number" name="doc">
+                </label>
+                <input type="submit" value="Reconstruct">
+            </form>
+        </li>
+    </ul>
+{{/inline}}
+{{~> skeleton~}}

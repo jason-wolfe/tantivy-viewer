@@ -1,25 +1,23 @@
-<html>
-<head></head>
-<body>
-<h1>Field Details</h1>
-<table>
-    <thead>
-    <tr>
-        <th>Field</th>
-        <th>Type</th>
-        <th>Extra options</th>
-    </tr>
-    </thead>
-
-    <tbody>
-    {{#each this}}
+{{#*inline "contents"}}
+    <h1>Field Details</h1>
+    <table>
+        <thead>
         <tr>
-            <td><a href="top_terms?field={{name}}">{{name}}</a></td>
-            <td>{{value_type}}</td>
-            <td>{{extra_options}}</td>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Extra options</th>
         </tr>
-    {{/each}}
-    </tbody>
-</table>
-</body>
-</html>
+        </thead>
+
+        <tbody>
+        {{#each this}}
+            <tr>
+                <td><a href="top_terms?field={{name}}">{{name}}</a></td>
+                <td>{{value_type}}</td>
+                <td>{{extra_options}}</td>
+            </tr>
+        {{/each}}
+        </tbody>
+    </table>
+{{/inline}}
+{{~> skeleton~}}
