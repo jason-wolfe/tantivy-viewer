@@ -8,6 +8,7 @@ extern crate failure_derive;
 extern crate handlebars;
 #[macro_use]
 extern crate log;
+extern crate pretty_bytes;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
@@ -30,6 +31,10 @@ use serde::Serialize;
 use actix_web::HttpResponse;
 use actix_web::Query;
 use actix_web::http;
+use pretty_bytes::converter::convert;
+use handlebars::Helper;
+use handlebars::RenderContext;
+use handlebars::RenderError;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -289,6 +294,17 @@ impl State {
     }
 }
 
+fn pretty_bytes(h: &Helper, _: &Handlebars, rc: &mut RenderContext) -> Result<(), RenderError> {
+    if let Some(param) = h.param(0) {
+        if let Some(param) = param.value().as_f64() {
+            rc.writer.write(convert(param).as_bytes())?;
+            return Ok(());
+        }
+    }
+    rc.writer.write("<invalid argument>".as_bytes())?;
+    Ok(())
+}
+
 fn main() -> Result<(), Error> {
     env_logger::init();
 
@@ -296,6 +312,7 @@ fn main() -> Result<(), Error> {
     let index = Arc::new(Index::open_in_dir(&args[1]).unwrap());
 
     let mut handlebars = Handlebars::new();
+    handlebars.register_helper("pretty_bytes", Box::new(pretty_bytes));
     for entry in fs::read_dir("./templates")? {
         let entry = entry?;
         let filename = entry.file_name();

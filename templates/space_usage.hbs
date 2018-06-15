@@ -1,5 +1,5 @@
 {{#*inline "contents"}}
-    <h1>Overall space usage: {{total}} bytes</h1>
+    <h1>Overall space usage: {{pretty_bytes total}}</h1>
 
     <div>
         <h1>Per Concept</h1>
@@ -9,7 +9,7 @@
             {{#each concepts}}
                 <tr>
                     <td>{{@key}}</td>
-                    <td>{{this}} bytes</td>
+                    <td>{{pretty_bytes this}}</td>
                 </tr>
             {{/each}}
             </tbody>
@@ -24,7 +24,7 @@
             {{#each fields}}
                 <tr>
                     <td>{{@key}}</td>
-                    <td>{{this}} bytes</td>
+                    <td>{{pretty_bytes this}}</td>
                 </tr>
             {{/each}}
             </tbody>
