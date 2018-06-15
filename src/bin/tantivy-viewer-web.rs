@@ -59,15 +59,23 @@ struct FieldData {
 struct IndexData {
     fields: Vec<FieldData>,
     segments: Vec<String>,
+    num_fields: usize,
+    total_usage: usize,
 }
 
 fn handle_index(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
     let state = req.state();
     let index = &state.index;
+    let searcher = index.searcher();
+    let space_usage = searcher.space_usage();
     let segments = index.searchable_segment_ids().map_err(TantivyViewerError::TantivyError)?;
+    let fields: Vec<_> = index.schema().fields().iter().map(|x| FieldData { name: x.name().to_string() }).collect();
+    let num_fields = fields.len();
     let data = IndexData {
-        fields: index.schema().fields().iter().map(|x| FieldData { name: x.name().to_string() }).collect(),
+        fields,
         segments: segments.into_iter().map(|x| x.short_uuid_string()).collect(),
+        num_fields,
+        total_usage: space_usage.total().0,
     };
 
     state.render_template("index", &data)
@@ -99,6 +107,12 @@ fn handle_field_details(req: HttpRequest<State>) -> Result<HttpResponse, Tantivy
     field_details.sort_unstable_by_key(|x| x.name.clone());
 
     state.render_template("field_details", &field_details)
+}
+
+fn handle_space_usage(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
+    let state = req.state();
+    let space_usage = tantivy_viewer::space_usage(&state.index);
+    state.render_template("space_usage", &space_usage)
 }
 
 #[derive(Deserialize)]
@@ -275,7 +289,6 @@ impl State {
     }
 }
 
-
 fn main() -> Result<(), Error> {
     env_logger::init();
 
@@ -302,6 +315,7 @@ fn main() -> Result<(), Error> {
         App::with_state(state.clone())
             .resource("/", |r| r.f(handle_index))
             .resource("/field_details", |r| r.f(handle_field_details))
+            .resource("/space_usage", |r| r.f(handle_space_usage))
             .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
             .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))

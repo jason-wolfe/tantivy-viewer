@@ -1,0 +1,34 @@
+{{#*inline "contents"}}
+    <h1>Overall space usage: {{total}} bytes</h1>
+
+    <div>
+        <h1>Per Concept</h1>
+
+        <table class="table table-striped table-bordered">
+            <tbody>
+            {{#each concepts}}
+                <tr>
+                    <td>{{@key}}</td>
+                    <td>{{this}} bytes</td>
+                </tr>
+            {{/each}}
+            </tbody>
+        </table>
+    </div>
+
+    <div>
+        <h1>Per Field</h1>
+
+        <table class="table table-striped table-bordered">
+            <tbody>
+            {{#each fields}}
+                <tr>
+                    <td>{{@key}}</td>
+                    <td>{{this}} bytes</td>
+                </tr>
+            {{/each}}
+            </tbody>
+        </table>
+    </div>
+{{/inline}}
+{{~> skeleton~}}

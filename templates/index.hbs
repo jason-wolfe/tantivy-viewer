@@ -1,14 +1,25 @@
 {{#*inline "contents"}}
     <ul class="list-group">
-        <li class="list-group-item">
-            <h2>
-                Start here if you're new!
-            </h2>
-            <a href="field_details" role="button" class="btn btn-primary">Detailed Field Information</a>
+        <li class="list-group-item list-group-item-primary">
+            Basic Functions
         </li>
 
         <li class="list-group-item">
-            Advanced options below.
+            <h3>{{num_fields}} Fields in Index</h3>
+            <a href="field_details" role="button" class="btn btn-primary">
+                Detailed Field Information
+            </a>
+        </li>
+
+        <li class="list-group-item">
+            <h3>Overall Space Usage: {{total_usage}} bytes</h3>
+            <a href="space_usage" role="button" class="btn btn-primary">
+                Detailed Space Usage Information
+            </a>
+        </li>
+
+        <li class="list-group-item list-group-item-secondary">
+            Advanced Functions
         </li>
 
         <li class="list-group-item">
