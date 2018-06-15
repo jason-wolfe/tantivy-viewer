@@ -1,84 +1,58 @@
 #![feature(transpose_result)]
 
+extern crate actix_web;
 extern crate env_logger;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 extern crate handlebars;
-extern crate handlebars_iron;
-extern crate iron;
-extern crate params;
-extern crate router;
+#[macro_use]
+extern crate log;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tantivy;
 extern crate tantivy_viewer;
+extern crate serde;
 
-use std::io::Result;
-
-use iron::Chain;
-use iron::Request;
-use iron::Response;
-use iron::Set;
-use iron::IronResult;
-use iron::prelude::Iron;
-use handlebars_iron::HandlebarsEngine;
-use handlebars_iron::DirectorySource;
-use handlebars_iron::Template;
+use actix_web::App;
+use failure::Error;
 use tantivy::Index;
-use iron::Handler;
-use iron::prelude::*;
-use iron::IronError;
 use std::env;
 use std::sync::Arc;
-use router::Router;
 use std::fmt;
-use std::error;
 use tantivy::DocId;
+use actix_web::HttpRequest;
+use actix_web::server;
+use handlebars::Handlebars;
+use std::fs;
+use serde::Serialize;
+use actix_web::HttpResponse;
+use actix_web::Query;
+use actix_web::http;
 
-#[derive(Debug)]
-enum UrlParameterError {
-    MissingParameter { key: Vec<String> },
-    InvalidParameter { key: Vec<String> },
+#[derive(Fail, Debug)]
+enum TantivyViewerError {
+    TantivyError(tantivy::Error),
+    RenderingError(handlebars::RenderError),
+    JsonSerializationError,
 }
 
-impl fmt::Display for UrlParameterError {
+impl fmt::Display for TantivyViewerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &UrlParameterError::MissingParameter { ref key } => write!(f, "Missing expected parameter {:?}", key),
-            &UrlParameterError::InvalidParameter { ref key } => write!(f, "Invalid value for parameter {:?}", key),
+            TantivyViewerError::TantivyError(_) => write!(f, "Tantivy error occurred"),
+            TantivyViewerError::RenderingError(_) => write!(f, "Rendering error occurred"),
+            TantivyViewerError::JsonSerializationError => write!(f, "Failed to serialize JSON"),
         }
     }
 }
 
-impl error::Error for UrlParameterError {
-
-}
-
-fn get_optional_parameter<T: params::FromValue>(params: &params::Map, key: &[&str]) -> IronResult<Option<T>> {
-    use UrlParameterError::*;
-    params
-        .find(key)
-        .map(|param_value|
-            <T>::from_value(param_value)
-                .ok_or_else(|| IronError::new(InvalidParameter { key: key.iter().map(|x| x.to_string()).collect() }, iron::status::BadRequest)))
-        .transpose()
-}
-
-fn get_parameter<T: params::FromValue>(params: &params::Map, key: &[&str]) -> IronResult<T> {
-    use UrlParameterError::*;
-    let param_value = params
-        .find(key)
-        .ok_or_else(|| IronError::new(MissingParameter { key: key.iter().map(|x| x.to_string()).collect() }, iron::status::BadRequest))?;
-
-    <T>::from_value(param_value).ok_or_else(|| IronError::new(InvalidParameter { key: key.iter().map(|x| x.to_string()).collect() }, iron::status::BadRequest))
-}
+impl actix_web::error::ResponseError for TantivyViewerError {}
 
 #[derive(Serialize)]
 struct FieldData {
     name: String,
-}
-
-struct IndexHandler {
-    index: Arc<Index>,
 }
 
 #[derive(Serialize)]
@@ -87,21 +61,16 @@ struct IndexData {
     segments: Vec<String>,
 }
 
-impl Handler for IndexHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        let mut response = Response::new();
-        let segments = self.index.searchable_segment_ids().map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
-        let data = IndexData {
-            fields: self.index.schema().fields().iter().map(|x| FieldData { name: x.name().to_string() } ).collect(),
-            segments: segments.into_iter().map(|x| x.short_uuid_string()).collect(),
-        };
-        response.set_mut(Template::new("index", data)).set_mut(iron::status::Ok);
-        Ok(response)
-    }
-}
+fn handle_index(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
+    let state = req.state();
+    let index = &state.index;
+    let segments = index.searchable_segment_ids().map_err(TantivyViewerError::TantivyError)?;
+    let data = IndexData {
+        fields: index.schema().fields().iter().map(|x| FieldData { name: x.name().to_string() }).collect(),
+        segments: segments.into_iter().map(|x| x.short_uuid_string()).collect(),
+    };
 
-struct FieldDetailsHandler {
-    index: Arc<Index>,
+    state.render_template("index", &data)
 }
 
 #[derive(Debug, Serialize)]
@@ -111,32 +80,31 @@ struct FieldDetail {
     extra_options: String,
 }
 
-impl Handler for FieldDetailsHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        let fields = tantivy_viewer::get_fields(&*self.index)
-            .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+fn handle_field_details(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
+    let state = req.state();
+    let fields = tantivy_viewer::get_fields(&state.index)
+        .map_err(TantivyViewerError::TantivyError)?;
 
-        let mut field_details = fields
-            .fields
-            .into_iter()
-            .map(|(_k, v)| Ok(FieldDetail {
-                name: v.name,
-                value_type: format!("{:?}", v.value_type),
-                extra_options: serde_json::to_string(&v.extra_options)?
-            }))
-            .collect::<Result<Vec<_>>>()
-            .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+    let mut field_details = fields
+        .fields
+        .into_iter()
+        .map(|(_k, v)| Ok(FieldDetail {
+            name: v.name,
+            value_type: format!("{:?}", v.value_type),
+            extra_options: serde_json::to_string(&v.extra_options)?
+        }))
+        .collect::<Result<Vec<_>, std::io::Error>>()
+        .map_err(|_e| TantivyViewerError::JsonSerializationError)?;
 
-        field_details.sort_unstable_by_key(|x| x.name.clone());
+    field_details.sort_unstable_by_key(|x| x.name.clone());
 
-        let mut response = Response::new();
-        response.set_mut(Template::new("field_details", field_details)).set_mut(iron::status::Ok);
-        Ok(response)
-    }
+    state.render_template("field_details", &field_details)
 }
 
-struct TopTermsHandler {
-    index: Arc<Index>,
+#[derive(Deserialize)]
+struct TopTermsQuery {
+    field: String,
+    k: Option<usize>,
 }
 
 #[derive(Serialize)]
@@ -151,28 +119,26 @@ struct TopTermsData {
     terms: Vec<TermCountData>,
 }
 
-impl Handler for TopTermsHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        use params::{Params};
-        let params = req.get_ref::<Params>().unwrap();
-        let field: String = get_parameter(params, &["field"])?;
-        let k = get_parameter(params, &["k"]).unwrap_or(100);
-        let top_terms = tantivy_viewer::top_terms(&*self.index, &field, k).unwrap();
-        let data = TopTermsData {
-            field,
-            terms: top_terms.terms.into_iter().map(|x| TermCountData {
-                term: format!("{}", x.term),
-                count: x.count
-            }).collect()
-        };
-        let mut response = Response::new();
-        response.set_mut(Template::new("top_terms", data)).set_mut(iron::status::Ok);
-        Ok(response)
-    }
+fn handle_top_terms(req: (HttpRequest<State>, Query<TopTermsQuery>)) -> Result<HttpResponse, TantivyViewerError>  {
+    let (req, params) = req;
+    let state = req.state();
+    let field = params.field.clone();
+    let k = params.k.unwrap_or(100);
+    let top_terms = tantivy_viewer::top_terms(&state.index, &field, k).unwrap();
+    let data = TopTermsData {
+        field,
+        terms: top_terms.terms.into_iter().map(|x| TermCountData {
+            term: format!("{}", x.term),
+            count: x.count
+        }).collect()
+    };
+    state.render_template("top_terms", &data)
 }
 
-struct TermDocsHandler {
-    index: Arc<Index>,
+#[derive(Deserialize)]
+struct TermDocsQuery {
+    field: String,
+    term: String,
 }
 
 #[derive(Serialize)]
@@ -189,41 +155,39 @@ struct TermDocsData {
     truncated: bool,
 }
 
-impl Handler for TermDocsHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        use params::{Params};
-        let params = req.get_ref::<Params>().unwrap();
+fn handle_term_docs(req: (HttpRequest<State>, Query<TermDocsQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+    let (req, params) = req;
+    let state = req.state();
+    let field = params.field.clone();
+    let term = params.term.clone();
 
-        let field: String = get_parameter(params, &["field"])?;
-        let term: String = get_parameter(params, &["term"])?;
+    let term_docs = tantivy_viewer::term_docs(&state.index, &field, &term)
+        .map_err(TantivyViewerError::TantivyError)?;
 
-        let term_docs = tantivy_viewer::term_docs(&*self.index, &field, &term)
-            .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
+    let num_docs = term_docs.len();
 
-        let num_docs = term_docs.len();
+    let term_docs = term_docs.into_iter()
+        .map(|x| DocAddress { doc: x.1, segment: x.0.short_uuid_string() })
+        .take(1000)
+        .collect::<Vec<_>>();
 
-        let term_docs = term_docs.into_iter()
-            .map(|x| DocAddress { doc: x.1, segment: x.0.short_uuid_string() })
-            .take(1000)
-            .collect::<Vec<_>>();
+    let truncated = num_docs > term_docs.len();
 
-        let truncated = num_docs > term_docs.len();
+    let term_docs_data = TermDocsData {
+        field,
+        term,
+        term_docs,
+        truncated,
+    };
 
-        let term_docs_data = TermDocsData {
-            field,
-            term,
-            term_docs,
-            truncated,
-        };
-
-        let mut response = Response::new();
-        response.set_mut(Template::new("term_docs", term_docs_data)).set_mut(iron::status::Ok);
-        Ok(response)
-    }
+    state.render_template("term_docs", &term_docs_data)
 }
 
-struct ReconstructHandler {
-    index: Arc<Index>,
+#[derive(Deserialize)]
+struct ReconstructQuery {
+    field: Option<String>,
+    segment: String,
+    doc: DocId,
 }
 
 #[derive(Serialize)]
@@ -240,80 +204,108 @@ struct ReconstructData {
     entries: Vec<ReconstructEntry>,
 }
 
-impl Handler for ReconstructHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        use params::{Params};
-        let params = req.get_ref::<Params>().unwrap();
+fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+    let (req, params) = req;
+    let state = req.state();
+    let field = params.field.clone();
+    let segment = params.segment.clone();
+    let doc = params.doc;
 
-        let field: Option<String> = get_optional_parameter(params, &["field"])?;
-        let segment: String = get_parameter(params, &["segment"])?;
-        let doc: DocId = get_parameter(params, &["doc"])?;
+    let mut fields = Vec::new();
+    let all_fields = field.is_none();
+    if let Some(field) = field {
+        // Reconstruct a specific field
+        fields.push(field);
+    } else {
+        // Reconstruct all fields
+        let schema = state.index.schema();
+        fields.extend(schema.fields().iter().map(|x| x.name().to_string()));
+    }
 
-        let mut fields = Vec::new();
-        let all_fields = field.is_none();
-        if let Some(field) = field {
-            // Reconstruct a specific field
-            fields.push(field);
-        } else {
-            // Reconstruct all fields
-            let schema = self.index.schema();
-            fields.extend(schema.fields().iter().map(|x| x.name().to_string()));
+    fields.sort();
+
+    let mut all_reconstructed = Vec::new();
+
+    for field in fields {
+        let reconstructed =
+            tantivy_viewer::reconstruct(&state.index, &field, &segment, doc)
+                .map_err(TantivyViewerError::TantivyError)?;
+
+        trace!("reconstructed = {:?}", reconstructed);
+
+        all_reconstructed.push(ReconstructEntry {
+            field,
+            contents: reconstructed.into_iter()
+                .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
+                .collect::<String>()
+        });
+    }
+
+    let data = ReconstructData {
+        segment,
+        doc,
+        all_fields,
+        entries: all_reconstructed,
+    };
+
+    state.render_template("reconstruct", &data)
+}
+
+struct State {
+    index: Arc<Index>,
+    handlebars: Arc<Handlebars>,
+}
+
+impl Clone for State {
+    fn clone(&self) -> Self {
+        State {
+            index: self.index.clone(),
+            handlebars: self.handlebars.clone(),
         }
+    }
+}
 
-        fields.sort();
-
-        let mut all_reconstructed = Vec::new();
-
-        for field in fields {
-            let reconstructed =
-                tantivy_viewer::reconstruct(&*self.index, &field, &segment, doc)
-                    .map_err(|e| IronError::new(e, iron::status::InternalServerError))?;
-
-            all_reconstructed.push(ReconstructEntry {
-                field,
-                contents: reconstructed.into_iter()
-                    .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
-                    .collect::<String>()
-            });
-        }
-
-        let data = ReconstructData {
-            segment,
-            doc,
-            all_fields,
-            entries: all_reconstructed,
-        };
-
-        let mut response = Response::new();
-        response.set_mut(Template::new("reconstruct", data)).set_mut(iron::status::Ok);
-        Ok(response)
+impl State {
+    fn render_template<T: Serialize>(&self, name: &str, data: &T) -> Result<HttpResponse, TantivyViewerError> {
+        Ok(
+            HttpResponse::Ok()
+            .content_type("text/html")
+            .body(self.handlebars.render(name, &data).map_err(TantivyViewerError::RenderingError)?)
+        )
     }
 }
 
 
-fn main() -> Result<()> {
+fn main() -> Result<(), Error> {
     env_logger::init();
 
     let args = env::args().collect::<Vec<_>>();
     let index = Arc::new(Index::open(&args[1]).unwrap());
 
-    let mut hbse = HandlebarsEngine::new();
-    hbse.add(Box::new(DirectorySource::new("./templates", ".hbs")));
+    let mut handlebars = Handlebars::new();
+    for entry in fs::read_dir("./templates")? {
+        let entry = entry?;
+        let filename = entry.file_name();
+        let filename_string = filename.to_string_lossy();
+        if filename_string.ends_with(".hbs") {
+            let template_name = &filename_string[..filename_string.len() - ".hbs".len()];
+            debug!("Registering template {}", template_name);
+            handlebars.register_template_file(template_name, entry.path())?;
+        }
+    }
 
-    hbse.reload().expect("failed to load templates");
-
-    let mut router = Router::new();
-    router.get("/", IndexHandler { index: index.clone() }, "index");
-    router.get("/field_details", FieldDetailsHandler { index: index.clone() }, "field_details");
-    router.get("/top_terms", TopTermsHandler { index: index.clone() }, "top_terms");
-    router.get("/term_docs", TermDocsHandler { index: index.clone() }, "term_docs");
-    router.get("/reconstruct", ReconstructHandler { index: index.clone() }, "reconstruct");
-
-    let mut chain = Chain::new(router);
-
-    chain.link_after(hbse);
-
-    Iron::new(chain).http("0.0.0.0:3000").unwrap();
+    let state = State {
+        index: index.clone(),
+        handlebars: Arc::new(handlebars),
+    };
+    server::new(move ||
+        App::with_state(state.clone())
+            .resource("/", |r| r.f(handle_index))
+            .resource("/field_details", |r| r.f(handle_field_details))
+            .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
+            .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
+            .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))
+    ).bind("0.0.0.0:3001").unwrap().run();
 
     Ok(())
 }

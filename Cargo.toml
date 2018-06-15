@@ -3,16 +3,19 @@ authors = ["Jason Wolfe <jasonwolfe@utexas.edu>"]
 name = "tantivy-viewer"
 version = "0.1.0"
 [dependencies]
+actix-web = "0.6.12"
 byteorder = "1.2.3"
 clap = "2.31.2"
 env_logger = "0.5.10"
+failure = "0.1.1"
+failure_derive = "0.1.1"
 fst = "0.3.0"
 handlebars = "0.32.4"
-handlebars-iron = "0.26.2"
-iron = "0.6.0"
-params = "0.8.0"
-router = "0.6.0"
+log = "0.4.2"
 serde = "1.0.57"
 serde_derive = "1.0.59"
 serde_json = "1.0.17"
-tantivy = { git = "https://github.com/tantivy-search/tantivy.git", branch = "staged_collector_with_multi" }
+
+[dependencies.tantivy]
+branch = "staged_collector_with_multi"
+git = "https://github.com/tantivy-search/tantivy.git"
