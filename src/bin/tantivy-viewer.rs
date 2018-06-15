@@ -55,7 +55,7 @@ fn main_inner() -> Result<()> {
                 .index(2)))
         .get_matches();
     let index_path = Path::new(matches.value_of("index").unwrap());
-    let index = Index::open(index_path)?;
+    let index = Index::open_in_dir(index_path)?;
     match matches.subcommand() {
         ("fields", _) => {
             let fields = get_fields(&index)?;

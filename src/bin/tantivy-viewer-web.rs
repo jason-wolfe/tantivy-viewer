@@ -280,7 +280,7 @@ fn main() -> Result<(), Error> {
     env_logger::init();
 
     let args = env::args().collect::<Vec<_>>();
-    let index = Arc::new(Index::open(&args[1]).unwrap());
+    let index = Arc::new(Index::open_in_dir(&args[1]).unwrap());
 
     let mut handlebars = Handlebars::new();
     for entry in fs::read_dir("./templates")? {

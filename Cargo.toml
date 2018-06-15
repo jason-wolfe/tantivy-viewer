@@ -17,5 +17,5 @@ serde_derive = "1.0.59"
 serde_json = "1.0.17"
 
 [dependencies.tantivy]
-branch = "staged_collector_with_multi"
+branch = "281-space-usage"
 git = "https://github.com/tantivy-search/tantivy.git"
