@@ -1,11 +1,22 @@
 {{#*inline "contents"}}
     <h1>Reconstruction of document ({{segment}}, {{doc}})</h1>
-    {{#each entries}}
-        <h2>{{field}}</h2>
-        {{contents}}
-    {{/each}}
+    <table class="table table-striped table-bordered">
+        <thead class="thead-light">
+            <tr><td>Field</td><td>Contents</td></tr>
+        </thead>
+        <tbody>
+        {{#each entries}}
+            <tr>
+                <td>{{field}}</td>
+                <td>{{contents}}</td>
+            </tr>
+        {{/each}}
+        </tbody>
+    </table>
     {{#unless all_fields}}
-        <h2><a href="reconstruct?segment={{segment}}&doc={{doc}}">Reconstruct all fields</a></h2>
+        <a href="reconstruct?segment={{segment}}&doc={{doc}}" role="button" class="btn btn-primary btn-lg">
+            Reconstruct all fields
+        </a>
     {{/unless}}
 {{/inline}}
 {{~> skeleton~}}
