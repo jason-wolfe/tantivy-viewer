@@ -1,102 +1,108 @@
 {{#*inline "contents"}}
-    <ul class="list-group">
-        <li class="list-group-item list-group-item-primary">
-            Basic Functions
-        </li>
 
-        <li class="list-group-item">
-            <h3>{{num_fields}} Fields in Index</h3>
-            <a href="field_details" role="button" class="btn btn-primary">
-                Detailed Field Information
-            </a>
-        </li>
+    <div class="row text-center">
+        <div class="col">
+            <h2>Basic Functions</h2>
+        </div>
+    </div>
 
-        <li class="list-group-item">
-            <h3>Overall Space Usage: {{pretty_bytes total_usage}}</h3>
-            <a href="space_usage" role="button" class="btn btn-primary">
-                Detailed Space Usage Information
-            </a>
-        </li>
-
-        <li class="list-group-item list-group-item-secondary">
-            <div>
-                <h2>Advanced Functions</h2>
-
-                <h5>For if you know exactly what you're looking for</h5>
-            </div>
-        </li>
-
-        <li class="list-group-item">
-            <div>
-                <ul class="nav nav-tabs mb-3" id="advancedTab" role="tablist">
-                    <li class="nav-item">
-                        <a class="nav-link active" id="topterms-tab" data-toggle="tab" href="#topterms" role="tab" aria-controls="topterms" aria-selected="true">
-                            Top Terms
-                        </a>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link" id="termdocs-tab" data-toggle="tab" href="#termdocs" role="tab" aria-controls="termdocs" aria-selected="false">
-                            Term Docs
-                        </a>
-                    </li>
-
-                    <li class="nav-item">
-                        <a class="nav-link" id="reconstruct-tab" data-toggle="tab" href="#reconstruct" role="tab" aria-controls="reconstruct" aria-selected="false">
-                            Reconstruct
-                        </a>
-                    </li>
-                </ul>
-
-                <div class="tab-content" id="advancedTabContent">
-                    <div class="tab-pane fade show active" id="topterms" role="tabpanel" aria-labelledby="topterms-tab">
-                        <form action="top_terms">
-                            <h3>Top Terms</h3>
-                            <div class="form-row mb-3">
-                                {{> field_picker fields=fields name="field" id="topTermsField" }}
-                                <div class="col">
-                                    <label for="topTermsK">K</label>
-                                    <input type="number" class="form-control" name="k" id="topTermsK" value="100">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Top Terms</button>
-                        </form>
-                    </div>
-
-                    <div class="tab-pane fade" id="termdocs" role="tabpanel" aria-labelledby="termdocs-tab">
-                        <form action="term_docs">
-                            <h3>Term Docs</h3>
-                            <div class="form-row mb-3">
-                                {{> field_picker fields=fields name="field" id="termDocsField"}}
-                                <div class="col">
-                                    <label for="termDocsTerm">Term</label>
-                                    <input type="text" class="form-control" name="term" id="termDocsTerm">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Term Docs</button>
-                        </form>
-                    </div>
-
-                    <div class="tab-pane fade" id="reconstruct" role="tabpanel" aria-labelledby="reconstruct-tab">
-                        <form action="reconstruct">
-                            <h3>Reconstruct</h3>
-                            <div class="form-row mb-3">
-                                {{> field_picker fields=fields name="field"}}
-                            </div>
-                            <div class="form-row mb-3">
-                                {{> segment_picker segments=segments name="segment" id="reconstructSegment"}}
-                                <div class="col">
-                                    <label for="reconstructDoc">Doc</label>
-                                    <input type="number" class="form-control" name="doc" id="reconstructDoc">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">Reconstruct</button>
-                        </form>
-                    </div>
+    <div class="row mb-3">
+        <div class="col-6">
+            <div class="card text-center p-3">
+                <div class="card-body">
+                    <h5 class="card-title">{{num_fields}} Fields in Index</h5>
+                    <a href="field_details" class="btn btn-primary">
+                        Detailed Field Information
+                    </a>
                 </div>
             </div>
-        </li>
+        </div>
 
-    </ul>
+        <div class="col-6">
+            <div class="card text-center p-3">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Space Usage: {{pretty_bytes total_usage}}</h5>
+                    <a href="space_usage" class="btn btn-primary">
+                        Detailed Space Usage Information
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row text-center">
+        <div class="col">
+            <h3>Advanced Functions</h3>
+        </div>
+    </div>
+
+    <div class="card p-3">
+        <ul class="nav nav-tabs mb-3" id="advancedTab" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" id="topterms-tab" data-toggle="tab" href="#topterms" role="tab" aria-controls="topterms" aria-selected="true">
+                    Top Terms
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link" id="termdocs-tab" data-toggle="tab" href="#termdocs" role="tab" aria-controls="termdocs" aria-selected="false">
+                    Term Docs
+                </a>
+            </li>
+
+            <li class="nav-item">
+                <a class="nav-link" id="reconstruct-tab" data-toggle="tab" href="#reconstruct" role="tab" aria-controls="reconstruct" aria-selected="false">
+                    Reconstruct
+                </a>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="advancedTabContent">
+            <div class="tab-pane fade show active" id="topterms" role="tabpanel" aria-labelledby="topterms-tab">
+                <form action="top_terms">
+                    <h3>Top Terms</h3>
+                    <div class="form-row mb-3">
+                        {{> field_picker fields=fields name="field" id="topTermsField" }}
+                        <div class="col">
+                            <label for="topTermsK">K</label>
+                            <input type="number" class="form-control" name="k" id="topTermsK" value="100">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Top Terms</button>
+                </form>
+            </div>
+
+            <div class="tab-pane fade" id="termdocs" role="tabpanel" aria-labelledby="termdocs-tab">
+                <form action="term_docs">
+                    <h3>Term Docs</h3>
+                    <div class="form-row mb-3">
+                        {{> field_picker fields=fields name="field" id="termDocsField"}}
+                        <div class="col">
+                            <label for="termDocsTerm">Term</label>
+                            <input type="text" class="form-control" name="term" id="termDocsTerm">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Term Docs</button>
+                </form>
+            </div>
+
+            <div class="tab-pane fade" id="reconstruct" role="tabpanel" aria-labelledby="reconstruct-tab">
+                <form action="reconstruct">
+                    <h3>Reconstruct</h3>
+                    <div class="form-row mb-3">
+                        {{> field_picker fields=fields name="field"}}
+                    </div>
+                    <div class="form-row mb-3">
+                        {{> segment_picker segments=segments name="segment" id="reconstructSegment"}}
+                        <div class="col">
+                            <label for="reconstructDoc">Doc</label>
+                            <input type="number" class="form-control" name="doc" id="reconstructDoc">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Reconstruct</button>
+                </form>
+            </div>
+        </div>
+    </div>
 {{/inline}}
 {{~> skeleton~}}
