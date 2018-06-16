@@ -24,41 +24,46 @@
 
         <li class="list-group-item">
             <form action="top_terms">
-                Top Terms
-                <br/>
-                {{> field_picker fields=fields name="field" }}
-                <label>
-                    K:
-                    <input type="number" name="k" value="100">
-                </label>
-                <input type="submit" value="Top Terms">
+                <h3>Top Terms</h3>
+                <div class="form-row">
+                    {{> field_picker fields=fields name="field" id="topTermsField" }}
+                    <div class="col">
+                        <label for="topTermsK">K</label>
+                        <input type="number" class="form-control" name="k" id="topTermsK" value="100">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Top Terms</button>
             </form>
         </li>
 
         <li class="list-group-item">
             <form action="term_docs">
-                Term Docs
-                <br/>
-                {{> field_picker fields=fields name="field"}}
-                <label>
-                    Term:
-                    <input type="text" name="term">
-                </label>
-                <input type="submit" value="Term Docs">
+                <h3>Term Docs</h3>
+                <div class="form-row">
+                    {{> field_picker fields=fields name="field" id="termDocsField"}}
+                    <div class="col">
+                        <label for="termDocsTerm">Term</label>
+                        <input type="text" class="form-control" name="term" id="termDocsTerm">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Term Docs</button>
             </form>
         </li>
 
         <li class="list-group-item">
             <form action="reconstruct">
-                Reconstruct
-                <br/>
-                {{> field_picker fields=fields name="field"}}
-                {{> segment_picker segments=segments name="segment"}}
-                <label>
-                    Doc:
-                    <input type="number" name="doc">
-                </label>
-                <input type="submit" value="Reconstruct">
+                <h3>Reconstruct</h3>
+                <div class="form-row">
+                    {{> field_picker fields=fields name="field"}}
+                </div>
+                <div class="form-row">
+                    {{> segment_picker segments=segments name="segment" id="reconstructSegment"}}
+                    <div class="col">
+                        <label for="reconstructDoc">Doc</label>
+                        <input type="number" class="form-control" name="doc" id="reconstructDoc">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Reconstruct</button>
             </form>
         </li>
     </ul>

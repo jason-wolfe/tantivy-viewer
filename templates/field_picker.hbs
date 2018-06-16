@@ -1,10 +1,10 @@
-<label>
-    Field:
-    <select name={{name}}>
+<div class="col">
+    <label for="{{name}}">Field</label>
+    <select class="form-control" name={{name}} id={{id}}>
         {{#each fields}}
             <option value={{this.name}}>
                 {{this.name}}
             </option>
         {{/each}}
     </select>
-</label>
+</div>

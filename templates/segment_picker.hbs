@@ -1,10 +1,10 @@
-<label>
-    Segment:
-    <select name={{name}}>
+<div class="col">
+    <label for={{id}}>Segment</label>
+    <select class="form-control" name={{name}} id={{id}}>
         {{#each segments}}
             <option value={{this}}>
                 {{this}}
             </option>
         {{/each}}
     </select>
-</label>
+</div>
