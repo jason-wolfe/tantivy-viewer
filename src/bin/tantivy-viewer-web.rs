@@ -283,7 +283,7 @@ fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Res
 
 #[derive(Deserialize)]
 struct SearchQuery {
-    query: String,
+    query: Option<String>,
 }
 
 struct DocCollector {
@@ -338,10 +338,23 @@ struct SearchData {
     truncated: bool,
 }
 
+impl SearchData {
+    fn empty() -> SearchData {
+        SearchData {
+            query: String::new(),
+            docs: Vec::new(),
+            truncated: false,
+        }
+    }
+}
+
 fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpResponse, TantivyViewerError> {
     let (req, params) = req;
     let state = req.state();
-    let raw_query = params.query.clone();
+    let raw_query = match params.query {
+        None => return state.render_template("search", &SearchData::empty()),
+        Some(ref query) => query.clone(),
+    };
 
     let query_parser = QueryParser::for_index(&state.index, vec![]);
     let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
