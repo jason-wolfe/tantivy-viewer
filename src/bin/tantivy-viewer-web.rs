@@ -21,7 +21,6 @@ use failure::Error;
 use tantivy::Index;
 use std::env;
 use std::sync::Arc;
-use std::fmt;
 use tantivy::DocId;
 use actix_web::HttpRequest;
 use actix_web::server;
@@ -42,24 +41,30 @@ use tantivy::SegmentReader;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
+    #[fail(display="An error occurred in tantivy")]
     TantivyError(tantivy::Error),
+    #[fail(display="Query parsing error occurred")]
     QueryParserError(tantivy::query::QueryParserError),
+    #[fail(display="Error encountered while rendering page")]
     RenderingError(handlebars::RenderError),
+    #[fail(display="Error encountered serializing json")]
     JsonSerializationError,
 }
 
-impl fmt::Display for TantivyViewerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TantivyViewerError::TantivyError(_) => write!(f, "Tantivy error occurred"),
-            TantivyViewerError::QueryParserError(_) => write!(f, "Query parsing error occurred"),
-            TantivyViewerError::RenderingError(_) => write!(f, "Rendering error occurred"),
-            TantivyViewerError::JsonSerializationError => write!(f, "Failed to serialize JSON"),
-        }
+impl actix_web::error::ResponseError for TantivyViewerError {
+    fn error_response(&self) -> HttpResponse {
+        let status = match *self {
+            TantivyViewerError::TantivyError(_)
+            | TantivyViewerError::RenderingError(_)
+            | TantivyViewerError::JsonSerializationError => http::StatusCode::INTERNAL_SERVER_ERROR,
+            TantivyViewerError::QueryParserError(_) => http::StatusCode::BAD_REQUEST,
+        };
+
+        HttpResponse::Ok()
+            .status(status)
+            .body(format!("{}", self))
     }
 }
-
-impl actix_web::error::ResponseError for TantivyViewerError {}
 
 #[derive(Serialize)]
 struct FieldData {

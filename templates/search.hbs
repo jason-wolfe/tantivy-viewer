@@ -1,5 +1,18 @@
 {{#*inline "contents"}}
+    <form action="search" class="m-3">
+        <div class="form-row">
+            <div class="col-6">
+                <label class="sr-only" for="query">Query</label>
+                <textarea class="form-control" name="query" id="query" rows="3" placeholder="Query. e.g., field:word">{{query}}</textarea>
+            </div>
+            <div class="col-4 align-self-center">
+                <button type="submit" class="btn btn-block btn-primary">New Search</button>
+            </div>
+        </div>
+    </form>
+
     <h1>Documents matching query <code>{{query}}</code></h1>
+
     <table class="table table-striped table-bordered">
         <thead class="thead-light">
         <tr>
