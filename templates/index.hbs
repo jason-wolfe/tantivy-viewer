@@ -25,7 +25,7 @@
         <li class="list-group-item">
             <form action="top_terms">
                 <h3>Top Terms</h3>
-                <div class="form-row">
+                <div class="form-row mb-3">
                     {{> field_picker fields=fields name="field" id="topTermsField" }}
                     <div class="col">
                         <label for="topTermsK">K</label>
@@ -39,7 +39,7 @@
         <li class="list-group-item">
             <form action="term_docs">
                 <h3>Term Docs</h3>
-                <div class="form-row">
+                <div class="form-row mb-3">
                     {{> field_picker fields=fields name="field" id="termDocsField"}}
                     <div class="col">
                         <label for="termDocsTerm">Term</label>
@@ -53,10 +53,10 @@
         <li class="list-group-item">
             <form action="reconstruct">
                 <h3>Reconstruct</h3>
-                <div class="form-row">
+                <div class="form-row mb-3">
                     {{> field_picker fields=fields name="field"}}
                 </div>
-                <div class="form-row">
+                <div class="form-row mb-3">
                     {{> segment_picker segments=segments name="segment" id="reconstructSegment"}}
                     <div class="col">
                         <label for="reconstructDoc">Doc</label>
