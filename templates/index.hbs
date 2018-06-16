@@ -11,6 +11,10 @@
             <div class="card text-center p-3">
                 <div class="card-body">
                     <h5 class="card-title">{{num_fields}} Fields in Index</h5>
+                    <p class="card-text">
+                        See basic details about what fields exists and how they are indexed,
+                        and then dive in and explore their contents.
+                    </p>
                     <a href="field_details" class="btn btn-primary">
                         Detailed Field Information
                     </a>
@@ -22,6 +26,10 @@
             <div class="card text-center p-3">
                 <div class="card-body">
                     <h5 class="card-title">Overall Space Usage: {{pretty_bytes total_usage}}</h5>
+                    <p class="card-text">
+                        See how much space is used to store different parts of the index.
+                        Also see how this breaks down per field.
+                    </p>
                     <a href="space_usage" class="btn btn-primary">
                         Detailed Space Usage Information
                     </a>
