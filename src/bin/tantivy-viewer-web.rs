@@ -35,10 +35,15 @@ use pretty_bytes::converter::convert;
 use handlebars::Helper;
 use handlebars::RenderContext;
 use handlebars::RenderError;
+use tantivy::query::QueryParser;
+use tantivy::SegmentId;
+use tantivy::collector::Collector;
+use tantivy::SegmentReader;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
     TantivyError(tantivy::Error),
+    QueryParserError(tantivy::query::QueryParserError),
     RenderingError(handlebars::RenderError),
     JsonSerializationError,
 }
@@ -47,6 +52,7 @@ impl fmt::Display for TantivyViewerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TantivyViewerError::TantivyError(_) => write!(f, "Tantivy error occurred"),
+            TantivyViewerError::QueryParserError(_) => write!(f, "Query parsing error occurred"),
             TantivyViewerError::RenderingError(_) => write!(f, "Rendering error occurred"),
             TantivyViewerError::JsonSerializationError => write!(f, "Failed to serialize JSON"),
         }
@@ -270,6 +276,104 @@ fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Res
     state.render_template("reconstruct", &data)
 }
 
+#[derive(Deserialize)]
+struct SearchQuery {
+    query: String,
+}
+
+struct DocCollector {
+    current_segment: Option<SegmentId>,
+    current_segment_docs: Vec<DocId>,
+    docs: Vec<(SegmentId, Vec<DocId>)>,
+}
+
+impl DocCollector {
+    fn new() -> DocCollector {
+        DocCollector {
+            current_segment: None,
+            current_segment_docs: Vec::new(),
+            docs: Vec::new(),
+        }
+    }
+
+    fn finish_segment(&mut self) {
+        if let Some(segment_id) = self.current_segment {
+            let mut docs = Vec::new();
+            std::mem::swap(&mut self.current_segment_docs, &mut docs);
+            self.docs.push((segment_id, docs));
+        }
+    }
+
+    fn into_docs(mut self) -> Vec<(SegmentId, Vec<DocId>)> {
+        self.finish_segment();
+        self.docs
+    }
+}
+
+impl Collector for DocCollector {
+    fn set_segment(&mut self, _segment_local_id: u32, segment: &SegmentReader) -> Result<(), tantivy::Error> {
+        self.finish_segment();
+        self.current_segment = Some(segment.segment_id());
+        Ok(())
+    }
+
+    fn collect(&mut self, doc: u32, _score: f32) {
+        self.current_segment_docs.push(doc);
+    }
+
+    fn requires_scoring(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Serialize)]
+struct SearchData {
+    query: String,
+    docs: Vec<(String, Vec<DocId>)>,
+    truncated: bool,
+}
+
+fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+    let (req, params) = req;
+    let state = req.state();
+    let raw_query = params.query.clone();
+
+    let query_parser = QueryParser::for_index(&state.index, vec![]);
+    let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
+
+    let searcher = state.index.searcher();
+    let mut collector = DocCollector::new();
+    query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
+
+    let docs = collector.into_docs();
+
+    let mut remaining = 1000;
+    let mut result = Vec::new();
+    let mut truncated = false;
+    for (segment, docs) in docs.into_iter() {
+        if remaining == 0 {
+            break;
+        }
+
+        let take = remaining.min(docs.len());
+        if take > 0 {
+            result.push((segment.short_uuid_string(), (&docs[..take]).iter().cloned().collect()));
+        }
+        if take < docs.len() {
+            truncated = true;
+        }
+        remaining -= take;
+    }
+
+    let data = SearchData {
+        query: raw_query,
+        docs: result,
+        truncated,
+    };
+
+    state.render_template("search", &data)
+}
+
 struct State {
     index: Arc<Index>,
     handlebars: Arc<Handlebars>,
@@ -336,6 +440,7 @@ fn main() -> Result<(), Error> {
             .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
             .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))
+            .resource("/search", |r| r.method(http::Method::GET).with(handle_search))
     ).bind("0.0.0.0:3001").unwrap().run();
 
     Ok(())
