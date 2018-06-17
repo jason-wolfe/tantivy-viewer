@@ -53,20 +53,30 @@ enum TantivyViewerError {
     RenderingError(handlebars::RenderError),
     #[fail(display="Error encountered serializing json")]
     JsonSerializationError,
+    #[fail(display="Could not find a segment with the given prefix")]
+    SegmentNotFoundError,
 }
 
 impl actix_web::error::ResponseError for TantivyViewerError {
     fn error_response(&self) -> HttpResponse {
+        use TantivyViewerError::*;
         let status = match *self {
-            TantivyViewerError::TantivyError(_)
-            | TantivyViewerError::RenderingError(_)
-            | TantivyViewerError::JsonSerializationError => http::StatusCode::INTERNAL_SERVER_ERROR,
-            TantivyViewerError::QueryParserError(_) => http::StatusCode::BAD_REQUEST,
+            TantivyError(_)
+            | RenderingError(_)
+            | JsonSerializationError => http::StatusCode::INTERNAL_SERVER_ERROR,
+            QueryParserError(_)
+            | SegmentNotFoundError => http::StatusCode::BAD_REQUEST,
         };
 
         HttpResponse::Ok()
             .status(status)
             .body(format!("{}", self))
+    }
+}
+
+impl From<tantivy::Error> for TantivyViewerError {
+    fn from(e: tantivy::Error) -> Self {
+        TantivyViewerError::TantivyError(e)
     }
 }
 
@@ -283,9 +293,22 @@ struct ReconstructData {
     entries: Vec<ReconstructEntry>,
 }
 
-fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, tantivy::Error> {
+fn find_segment(index: &Index, segment_str: &str) -> Result<Option<SegmentId>, tantivy::Error> {
+    for segment_id in index.searchable_segment_ids()?.into_iter() {
+        if segment_id.uuid_string().starts_with(segment_str) {
+            return Ok(Some(segment_id));
+        }
+    }
+    Ok(None)
+}
+
+fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, TantivyViewerError> {
+    let segment = find_segment(index, segment)
+        .map_err(TantivyViewerError::TantivyError)?
+        .ok_or(TantivyViewerError::SegmentNotFoundError)?;
     Ok(
-        tantivy_viewer::reconstruct(index, field, segment, doc)?
+        tantivy_viewer::reconstruct_one(index, field, segment, doc)
+        .map_err(TantivyViewerError::TantivyError)?
         .into_iter()
         .map(|opt| opt.map(|x| format!(" {}", x)).unwrap_or_default())
         .collect::<String>()
@@ -315,8 +338,7 @@ fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Res
     let mut all_reconstructed = Vec::new();
 
     for field in fields {
-        let contents = reconstruct_to_string(&state.index, &field, &segment, doc)
-                .map_err(TantivyViewerError::TantivyError)?;
+        let contents = reconstruct_to_string(&state.index, &field, &segment, doc)?;
 
         all_reconstructed.push(ReconstructEntry {
             field,
@@ -438,10 +460,9 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
                 .iter()
                 .map(|&doc| Ok(
                     (doc,
-                     identifying_fields.iter().map(|field| reconstruct_to_string(&state.index, &*field, &segment_str, doc)).collect::<Result<Vec<_>, tantivy::Error>>()?
+                     identifying_fields.iter().map(|field| reconstruct_to_string(&state.index, &*field, &segment_str, doc)).collect::<Result<Vec<_>, TantivyViewerError>>()?
                     )))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(TantivyViewerError::TantivyError)?;
+                .collect::<Result<Vec<_>, TantivyViewerError>>()?;
 
             result.push((segment.short_uuid_string(), reconstructed_docs));
         }

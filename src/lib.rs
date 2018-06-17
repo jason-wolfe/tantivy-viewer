@@ -8,7 +8,7 @@ extern crate tantivy;
 mod fields;
 pub use fields::get_fields;
 mod reconstruct;
-pub use reconstruct::reconstruct;
+pub use reconstruct::{reconstruct, reconstruct_one};
 mod space_usage;
 pub use space_usage::space_usage;
 mod top_terms;
