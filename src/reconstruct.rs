@@ -70,7 +70,7 @@ pub fn reconstruct(index: &Index, field: &str, docs: &HashMap<SegmentId, Vec<Doc
                         let mut reconstructed_doc = &mut segment_reconstructed_docs.get_mut(idx).unwrap().1;
                         let mut seek = !reached_end;
                         if let Some(current_doc) = current_doc {
-                            if current_doc <= doc {
+                            if current_doc >= doc {
                                 seek = false;
                             }
                             if current_doc == doc {
