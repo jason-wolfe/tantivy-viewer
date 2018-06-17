@@ -287,7 +287,7 @@ fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) 
     Ok(
         tantivy_viewer::reconstruct(index, field, segment, doc)?
         .into_iter()
-        .map(|opt| opt.map(|x| format!("{}", x)).unwrap_or_default())
+        .map(|opt| opt.map(|x| format!(" {}", x)).unwrap_or_default())
         .collect::<String>()
     )
 }
