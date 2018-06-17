@@ -42,6 +42,8 @@ use tantivy::collector::Collector;
 use tantivy::SegmentReader;
 use std::collections::HashSet;
 use itertools::Itertools;
+use std::collections::HashMap;
+use tantivy_viewer::TantivyValue;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -302,16 +304,21 @@ fn find_segment(index: &Index, segment_str: &str) -> Result<Option<SegmentId>, t
     Ok(None)
 }
 
+fn stringify_values(values: Vec<Option<TantivyValue>>) -> String {
+    values.into_iter()
+        .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
+        .collect()
+}
+
 fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, TantivyViewerError> {
     let segment = find_segment(index, segment)
         .map_err(TantivyViewerError::TantivyError)?
         .ok_or(TantivyViewerError::SegmentNotFoundError)?;
     Ok(
-        tantivy_viewer::reconstruct_one(index, field, segment, doc)
-        .map_err(TantivyViewerError::TantivyError)?
-        .into_iter()
-        .map(|opt| opt.map(|x| format!(" {}", x)).unwrap_or_default())
-        .collect::<String>()
+        stringify_values(
+            tantivy_viewer::reconstruct_one(index, field, segment, doc)
+            .map_err(TantivyViewerError::TantivyError)?
+        )
     )
 }
 
@@ -445,32 +452,51 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
     let identifying_fields = get_identifying_fields(&req);
 
     let mut remaining = 1000;
-    let mut result = Vec::new();
+    let mut docs_to_reconstruct = HashMap::new();
     let mut truncated = false;
     for (segment, docs) in docs.into_iter() {
+        let num_docs = docs.len();
         if remaining == 0 {
             break;
         }
 
         let take = remaining.min(docs.len());
         if take > 0 {
-            let segment_str = segment.uuid_string();
-
-            let reconstructed_docs = (&docs[..take])
-                .iter()
-                .map(|&doc| Ok(
-                    (doc,
-                     identifying_fields.iter().map(|field| reconstruct_to_string(&state.index, &*field, &segment_str, doc)).collect::<Result<Vec<_>, TantivyViewerError>>()?
-                    )))
-                .collect::<Result<Vec<_>, TantivyViewerError>>()?;
-
-            result.push((segment.short_uuid_string(), reconstructed_docs));
+            docs_to_reconstruct.insert(segment, docs.into_iter().take(take).collect());
         }
-        if take < docs.len() {
+        if take < num_docs {
             truncated = true;
         }
         remaining -= take;
     }
+
+    let mut reconstructed_fields = Vec::new();
+    for field in identifying_fields.iter() {
+        let reconstructed = tantivy_viewer::reconstruct(&state.index, &*field, &docs_to_reconstruct)?;
+        let reconstructed = reconstructed
+            .into_iter()
+            .map(|(segment, docs)| {
+                (segment, docs.into_iter().map(|(doc, values)| (doc, stringify_values(values))).collect::<Vec<_>>())
+            })
+            .collect::<HashMap<_, _>>();
+        reconstructed_fields.push(reconstructed);
+    }
+
+    let mut result = Vec::new();
+    for (segment, docs) in docs_to_reconstruct.into_iter() {
+        let mut segment_docs = Vec::new();
+        for (idx, doc) in docs.into_iter().enumerate() {
+            let mut doc_reconstructed_fields = Vec::new();
+            for field in reconstructed_fields.iter_mut() {
+                let mut str_swap = String::new();
+                std::mem::swap(&mut str_swap, &mut field.get_mut(&segment).unwrap().get_mut(idx).unwrap().1);
+                doc_reconstructed_fields.push(str_swap);
+            }
+            segment_docs.push((doc, doc_reconstructed_fields));
+        }
+        result.push((segment.short_uuid_string(), segment_docs));
+    }
+
 
     let data = SearchData {
         query: raw_query,

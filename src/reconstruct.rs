@@ -35,11 +35,11 @@ impl FieldTypeExt for FieldType {
 pub fn reconstruct_one(index: &Index, field: &str, segment: SegmentId, doc: DocId) -> Result<Vec<Option<TantivyValue>>> {
     let mut segment_to_doc = HashMap::new();
     segment_to_doc.insert(segment, vec![doc]);
-    let mut result_map = reconstruct(index, field, segment_to_doc)?;
+    let mut result_map = reconstruct(index, field, &segment_to_doc)?;
     Ok(result_map.remove(&segment).unwrap().pop().unwrap().1)
 }
 
-pub fn reconstruct(index: &Index, field: &str, docs: HashMap<SegmentId, Vec<DocId>>) -> Result<HashMap<SegmentId, Vec<(DocId, Vec<Option<TantivyValue>>)>>> {
+pub fn reconstruct(index: &Index, field: &str, docs: &HashMap<SegmentId, Vec<DocId>>) -> Result<HashMap<SegmentId, Vec<(DocId, Vec<Option<TantivyValue>>)>>> {
     let schema = index.schema();
     let field = schema.get_field(field).ok_or("Field not found")?;
     let field_type = schema.get_field_entry(field).field_type();
