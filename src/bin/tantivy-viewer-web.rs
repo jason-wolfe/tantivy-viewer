@@ -1,11 +1,13 @@
 #![feature(transpose_result)]
 
 extern crate actix_web;
+extern crate cookie;
 extern crate env_logger;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate handlebars;
+extern crate itertools;
 #[macro_use]
 extern crate log;
 extern crate pretty_bytes;
@@ -38,6 +40,8 @@ use tantivy::query::QueryParser;
 use tantivy::SegmentId;
 use tantivy::collector::Collector;
 use tantivy::SegmentReader;
+use std::collections::HashSet;
+use itertools::Itertools;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -129,6 +133,51 @@ fn handle_space_usage(req: HttpRequest<State>) -> Result<HttpResponse, TantivyVi
     let state = req.state();
     let space_usage = tantivy_viewer::space_usage(&state.index);
     state.render_template("space_usage", &space_usage)
+}
+
+fn get_identifying_fields<S>(req: &HttpRequest<S>) -> Vec<String> {
+    let mut cookie_fields = Vec::new();
+
+    if let Ok(cookies) = req.cookies() {
+        for cookie in cookies {
+            if cookie.name() == "selected" {
+                for value in cookie.value().split(",") {
+                    cookie_fields.push(value.to_string());
+                }
+            }
+        }
+    }
+
+    cookie_fields
+}
+
+#[derive(Serialize)]
+struct ConfigurationField {
+    field: String,
+    selected: bool,
+}
+
+fn handle_configure(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
+    let state = req.state();
+    let fields = tantivy_viewer::get_fields(&state.index)
+        .map_err(TantivyViewerError::TantivyError)?;
+
+    let cookie_fields = get_identifying_fields(&req).into_iter().collect::<HashSet<String>>();
+
+    let fields = fields.fields
+        .into_iter()
+        .map(|(field,_v)| {
+            let selected = cookie_fields.contains(&field);
+            ConfigurationField {
+                field,
+                selected,
+            }
+        })
+        .sorted_by(|x, y| {
+            x.selected.cmp(&y.selected).reverse().then_with(|| x.field.cmp(&y.field))
+        });
+
+    state.render_template("configure", &fields)
 }
 
 #[derive(Deserialize)]
@@ -234,6 +283,15 @@ struct ReconstructData {
     entries: Vec<ReconstructEntry>,
 }
 
+fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, tantivy::Error> {
+    Ok(
+        tantivy_viewer::reconstruct(index, field, segment, doc)?
+        .into_iter()
+        .map(|opt| opt.map(|x| format!("{}", x)).unwrap_or_default())
+        .collect::<String>()
+    )
+}
+
 fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, TantivyViewerError> {
     let (req, params) = req;
     let state = req.state();
@@ -257,17 +315,12 @@ fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Res
     let mut all_reconstructed = Vec::new();
 
     for field in fields {
-        let reconstructed =
-            tantivy_viewer::reconstruct(&state.index, &field, &segment, doc)
+        let contents = reconstruct_to_string(&state.index, &field, &segment, doc)
                 .map_err(TantivyViewerError::TantivyError)?;
-
-        trace!("reconstructed = {:?}", reconstructed);
 
         all_reconstructed.push(ReconstructEntry {
             field,
-            contents: reconstructed.into_iter()
-                .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
-                .collect::<String>()
+            contents
         });
     }
 
@@ -334,7 +387,8 @@ impl Collector for DocCollector {
 #[derive(Serialize)]
 struct SearchData {
     query: String,
-    docs: Vec<(String, Vec<DocId>)>,
+    reconstructed_fields: Vec<String>,
+    docs: Vec<(String, Vec<(DocId, Vec<String>)>)>,
     truncated: bool,
 }
 
@@ -342,6 +396,7 @@ impl SearchData {
     fn empty() -> SearchData {
         SearchData {
             query: String::new(),
+            reconstructed_fields: Vec::new(),
             docs: Vec::new(),
             truncated: false,
         }
@@ -365,6 +420,8 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 
     let docs = collector.into_docs();
 
+    let identifying_fields = get_identifying_fields(&req);
+
     let mut remaining = 1000;
     let mut result = Vec::new();
     let mut truncated = false;
@@ -375,7 +432,18 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 
         let take = remaining.min(docs.len());
         if take > 0 {
-            result.push((segment.short_uuid_string(), (&docs[..take]).iter().cloned().collect()));
+            let segment_str = segment.uuid_string();
+
+            let reconstructed_docs = (&docs[..take])
+                .iter()
+                .map(|&doc| Ok(
+                    (doc,
+                     identifying_fields.iter().map(|field| reconstruct_to_string(&state.index, &*field, &segment_str, doc)).collect::<Result<Vec<_>, tantivy::Error>>()?
+                    )))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(TantivyViewerError::TantivyError)?;
+
+            result.push((segment.short_uuid_string(), reconstructed_docs));
         }
         if take < docs.len() {
             truncated = true;
@@ -385,6 +453,7 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 
     let data = SearchData {
         query: raw_query,
+        reconstructed_fields: identifying_fields,
         docs: result,
         truncated,
     };
@@ -455,6 +524,7 @@ fn main() -> Result<(), Error> {
             .resource("/", |r| r.f(handle_index))
             .resource("/field_details", |r| r.f(handle_field_details))
             .resource("/space_usage", |r| r.f(handle_space_usage))
+            .resource("/configure", |r| r.f(handle_configure))
             .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
             .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))

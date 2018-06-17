@@ -1,0 +1,33 @@
+{{#*inline "contents"}}
+    <h1>Configure Identifying Fields</h1>
+
+    These fields will be used when displaying tables of documents in order
+    to provide additional identifying columns.
+
+    If you have something like an identifier, a title, or some other such
+    readable information, add it here and the outputs will be much more usable.
+
+    <form class="m-3">
+        {{#each this}}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="fieldCheckbox{{field}}" value="{{field}}" {{#if selected}}checked{{/if}}>
+                <label class="form-check-label" for="fieldCheckbox{{field}}">{{field}}</label>
+            </div>
+        {{/each}}
+        <button class="btn btn-primary" id="fieldsSubmit">Save</button>
+    </form>
+{{/inline}}
+{{#*inline "scripts"}}
+    <script type="text/javascript">
+        $(function() {
+            $('#fieldsSubmit').click(function() {
+                let selected = "";
+                $("input[type=checkbox]:checked").each((idx, elem) => {
+                    selected += (selected.length == 0 ? "" : ",") + elem.value;
+                });
+                document.cookie = "selected=" + selected;
+            });
+        });
+    </script>
+{{/inline}}
+{{~> skeleton~}}
