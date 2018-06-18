@@ -7,6 +7,7 @@ extern crate env_logger;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
+extern crate fst;
 extern crate handlebars;
 extern crate itertools;
 #[macro_use]
@@ -16,8 +17,12 @@ extern crate pretty_bytes;
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tantivy;
-extern crate tantivy_viewer;
 extern crate serde;
+
+mod fields;
+mod reconstruct;
+mod space_usage;
+mod top_terms;
 
 use actix_web::App;
 use failure::Error;
@@ -44,7 +49,6 @@ use tantivy::SegmentReader;
 use std::collections::HashSet;
 use itertools::Itertools;
 use std::collections::HashMap;
-use tantivy_viewer::TantivyValue;
 use tantivy::schema::Schema;
 use tantivy::query::BooleanQuery;
 use tantivy::query::Occur;
@@ -53,6 +57,13 @@ use tantivy::Term;
 use tantivy::schema::Type;
 use tantivy::query::PhraseQuery;
 use tantivy::query::RangeQuery;
+
+use fields::get_fields;
+use space_usage::space_usage;
+use top_terms::top_terms;
+use top_terms::TantivyValue;
+use reconstruct::reconstruct_one;
+use reconstruct::reconstruct;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -131,7 +142,7 @@ struct FieldDetail {
 
 fn handle_field_details(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
     let state = req.state();
-    let fields = tantivy_viewer::get_fields(&state.index)
+    let fields = get_fields(&state.index)
         .map_err(TantivyViewerError::TantivyError)?;
 
     let mut field_details = fields
@@ -152,7 +163,7 @@ fn handle_field_details(req: HttpRequest<State>) -> Result<HttpResponse, Tantivy
 
 fn handle_space_usage(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
     let state = req.state();
-    let space_usage = tantivy_viewer::space_usage(&state.index);
+    let space_usage = space_usage(&state.index);
     state.render_template("space_usage", &space_usage)
 }
 
@@ -180,7 +191,7 @@ struct ConfigurationField {
 
 fn handle_configure(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerError> {
     let state = req.state();
-    let fields = tantivy_viewer::get_fields(&state.index)
+    let fields = get_fields(&state.index)
         .map_err(TantivyViewerError::TantivyError)?;
 
     let cookie_fields = get_identifying_fields(&req).into_iter().collect::<HashSet<String>>();
@@ -224,7 +235,7 @@ fn handle_top_terms(req: (HttpRequest<State>, Query<TopTermsQuery>)) -> Result<H
     let state = req.state();
     let field = params.field.clone();
     let k = params.k.unwrap_or(100);
-    let top_terms = tantivy_viewer::top_terms(&state.index, &field, k).unwrap();
+    let top_terms = top_terms(&state.index, &field, k).unwrap();
     let data = TopTermsData {
         field,
         terms: top_terms.terms.into_iter().map(|x| TermCountData {
@@ -277,7 +288,7 @@ fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) 
         .ok_or(TantivyViewerError::SegmentNotFoundError)?;
     Ok(
         stringify_values(
-            tantivy_viewer::reconstruct_one(index, field, segment, doc)
+            reconstruct_one(index, field, segment, doc)
             .map_err(TantivyViewerError::TantivyError)?
         )
     )
@@ -433,7 +444,7 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 
     let mut reconstructed_fields = Vec::new();
     for field in identifying_fields.iter() {
-        let reconstructed = tantivy_viewer::reconstruct(&state.index, &*field, &docs_to_reconstruct)?;
+        let reconstructed = reconstruct(&state.index, &*field, &docs_to_reconstruct)?;
         let reconstructed = reconstructed
             .into_iter()
             .map(|(segment, docs)| {
