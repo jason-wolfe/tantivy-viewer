@@ -659,7 +659,7 @@ fn main() -> Result<(), Error> {
             .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))
             .resource("/search", |r| r.method(http::Method::GET).with(handle_search))
-    ).bind("0.0.0.0:3001").unwrap().run();
+    ).bind("0.0.0.0:3000").unwrap().run();
 
     Ok(())
 }
