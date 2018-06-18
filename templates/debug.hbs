@@ -1,0 +1,16 @@
+{{#*inline "contents"}}
+    <div class="accordion">
+        <div class="card">
+            <div class="card-header">
+                <h5><code>{{query_string}}</code> -- {{count}}</h5>
+            </div>
+
+            <div class="pl-5">
+                {{#each children}}
+                    {{> debug }}
+                {{/each}}
+            </div>
+        </div>
+    </div>
+{{/inline}}
+{{~> skeleton~}}

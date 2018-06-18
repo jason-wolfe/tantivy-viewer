@@ -57,6 +57,7 @@ use tantivy::Term;
 use tantivy::schema::Type;
 use tantivy::query::PhraseQuery;
 use tantivy::query::RangeQuery;
+use tantivy::collector::CountCollector;
 
 use fields::get_fields;
 use space_usage::space_usage;
@@ -64,6 +65,7 @@ use top_terms::top_terms;
 use top_terms::TantivyValue;
 use reconstruct::reconstruct_one;
 use reconstruct::reconstruct;
+use tantivy::query::AllQuery;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -77,6 +79,8 @@ enum TantivyViewerError {
     JsonSerializationError,
     #[fail(display="Could not find a segment with the given prefix")]
     SegmentNotFoundError,
+    #[fail(display="Could not break down unknown query type")]
+    UnknownQueryTypeError,
 }
 
 impl actix_web::error::ResponseError for TantivyViewerError {
@@ -85,7 +89,8 @@ impl actix_web::error::ResponseError for TantivyViewerError {
         let status = match *self {
             TantivyError(_)
             | RenderingError(_)
-            | JsonSerializationError => http::StatusCode::INTERNAL_SERVER_ERROR,
+            | JsonSerializationError
+            | UnknownQueryTypeError => http::StatusCode::INTERNAL_SERVER_ERROR,
             QueryParserError(_)
             | SegmentNotFoundError => http::StatusCode::BAD_REQUEST,
         };
@@ -99,6 +104,12 @@ impl actix_web::error::ResponseError for TantivyViewerError {
 impl From<tantivy::Error> for TantivyViewerError {
     fn from(e: tantivy::Error) -> Self {
         TantivyViewerError::TantivyError(e)
+    }
+}
+
+impl From<UnknownQueryTypeError> for TantivyViewerError {
+    fn from(_: UnknownQueryTypeError) -> Self {
+        TantivyViewerError::UnknownQueryTypeError
     }
 }
 
@@ -480,6 +491,49 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
     state.render_template("search", &data)
 }
 
+#[derive(Deserialize)]
+struct DebugQuery {
+    query: String,
+}
+
+#[derive(Serialize)]
+struct DebugTree  {
+    count: usize,
+    query_string: String,
+    children: Vec<DebugTree>,
+}
+
+fn debug_query(index: &Index, query: &tantivy::query::Query) -> Result<DebugTree, TantivyViewerError> {
+    let mut collector = CountCollector::default();
+    let searcher = index.searcher();
+    query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
+    let count = collector.count();
+
+    let children = child_queries(query)?;
+    let children = children.into_iter()
+        .map(|q| debug_query(index, &*q))
+        .collect::<Result<Vec<_>, TantivyViewerError>>()?;
+
+    Ok(DebugTree {
+        count,
+        query_string: query_to_string(query, &index.schema()),
+        children,
+    })
+}
+
+fn handle_debug(req: (HttpRequest<State>, Query<DebugQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+    let (req, params) = req;
+    let state = req.state();
+    let raw_query = params.query.clone();
+
+    let query_parser = QueryParser::for_index(&state.index, vec![]);
+    let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
+
+    let data = debug_query(&state.index, &*query)?;
+
+    state.render_template("debug", &data)
+}
+
 struct State {
     index: Arc<Index>,
     handlebars: Arc<Handlebars>,
@@ -513,6 +567,23 @@ fn pretty_bytes(h: &Helper, _: &Handlebars, rc: &mut RenderContext) -> Result<()
     }
     rc.writer.write("<invalid argument>".as_bytes())?;
     Ok(())
+}
+
+struct UnknownQueryTypeError;
+fn child_queries(query: &tantivy::query::Query) -> Result<Vec<Box<tantivy::query::Query>>, UnknownQueryTypeError> {
+    let mut result = Vec::new();
+    if let Ok(ref query) = query.downcast_ref::<BooleanQuery>() {
+        for (_occur, clause) in query.clauses() {
+            result.push(clause.box_clone());
+        }
+    } else if let Ok(_query) = query.downcast_ref::<TermQuery>() {
+    } else if let Ok(_query) = query.downcast_ref::<PhraseQuery>() {
+    } else if let Ok(_query) = query.downcast_ref::<RangeQuery>() {
+    } else if let Ok(_query) = query.downcast_ref::<AllQuery>() {
+    } else {
+        return Err(UnknownQueryTypeError);
+    }
+    Ok(result)
 }
 
 fn push_term_str(term: &Term, value_type: &Type, allow_quoting: bool, output: &mut String) {
@@ -582,8 +653,10 @@ fn push_query_to_string(query: &tantivy::query::Query, schema: &Schema, output: 
             push_term_str(term, &value_type, false, output);
         }
         output.push('"');
-    } else if let Ok(query) = query.downcast_ref::<RangeQuery>() {
+    } else if let Ok(_query) = query.downcast_ref::<RangeQuery>() {
         output.push_str("<range query cannot be parsed>");
+    } else if let Ok(_query) = query.downcast_ref::<AllQuery>() {
+        output.push_str("<all query cannot be parsed>");
     } else {
         output.push_str(&format!("<unknown query type {:?}>", query));
     }
@@ -621,6 +694,7 @@ fn main() -> Result<(), Error> {
             .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))
             .resource("/search", |r| r.method(http::Method::GET).with(handle_search))
+            .resource("/debug", |r| r.method(http::Method::GET).with(handle_debug))
     ).bind("0.0.0.0:3000").unwrap().run();
 
     Ok(())
