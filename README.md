@@ -16,11 +16,10 @@ moving back to a normal dependency.
 - Viewing the index schema in detail
 - Exploring fields
     - Top terms per field
-    - Which documents have a given term
     - Reconstructing particular documents from the index,
       either by uninverting or reading fast fields
-- Command line interface for when a web interface is 
-  inconvenient or impractical.
+- Searching the index
+    - Reconstructed identifying fields alongside search results for readability
   
 # Getting started
 
@@ -46,106 +45,14 @@ via `cargo install`.
 
 ## Running the Web Server
 
-Run the `tantivy-viewer-web` executable with an argument pointing to 
+Run the `tantivy-viewer` executable with an argument pointing to 
 your tantivy directory, and a server will be started on localhost:3000.
 
 ```
-➜  ./target/debug/tantivy-viewer-web /tmp/my_index
+➜  ./target/debug/tantivy-viewer /tmp/my_index
 ```
 
 Point your browser to [http://localhost:3000/](http://localhost:3000/)
 to start exploring! 
 
 (TODO: Add a parameter for controlling the server port)
-
-## Running the command line interface
-
-Run the `tantivy-viewer` executable.
-
-Thanks to [clap](https://crates.io/crates/clap) the program is somewhat self-documenting.
-
-Running with the "help" subcommand describes all of the options.
-
-Running with "help <subcommand>" will explain the usage of a particular command.
-
-Here is a sample session on a toy index:
-
-```
-➜  ./target/debug/tantivy-viewer help   
-tantivy-viewer 
-
-USAGE:
-    tantivy-viewer <index> [SUBCOMMAND]
-
-FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
-
-ARGS:
-    <index>    
-
-SUBCOMMANDS:
-    fields         
-    help           Prints this message or the help of the given subcommand(s)
-    reconstruct    
-    termdocs       
-    topterms       
-
-➜  ./target/debug/tantivy-viewer /tmp/my_index fields 
-Fields {
-    fields: {
-        "id": FieldDescriptor {
-            name: "id",
-            value_type: I64,
-            extra_options: Object(
-                {
-                    "fast": String(
-                        "single"
-                    ),
-                    "indexed": Bool(
-                        false
-                    ),
-                    "stored": Bool(
-                        false
-                    )
-                }
-            )
-        },
-        "body": FieldDescriptor {
-            name: "body",
-            value_type: Str,
-            extra_options: Object(
-                {
-                    "indexing": Object(
-                        {
-                            "record": String(
-                                "position"
-                            ),
-                            "tokenizer": String(
-                                "default"
-                            )
-                        }
-                    ),
-                    "stored": Bool(
-                        false
-                    )
-                }
-            )
-        }
-    }
-}
-
-➜  ./target/debug/tantivy-viewer /tmp/my_index topterms body 1
-TermCount { count: 6, term: Text("c") }
-
-➜  ./target/debug/tantivy-viewer /tmp/my_index termdocs body c
-(1dbb5705, 0)
-(334149b7, 0)
-(5304ac6f, 0)
-(56cbf23e, 0)
-(98b35d2d, 0)
-(dce0f804, 0)
-
-➜  ./target/debug/tantivy-viewer /tmp/my_index reconstruct 1dbb 0 body
-b c %    
-```
