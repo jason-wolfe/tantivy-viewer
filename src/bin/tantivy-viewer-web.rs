@@ -2,6 +2,7 @@
 
 extern crate actix_web;
 extern crate cookie;
+extern crate downcast;
 extern crate env_logger;
 extern crate failure;
 #[macro_use]
@@ -44,6 +45,14 @@ use std::collections::HashSet;
 use itertools::Itertools;
 use std::collections::HashMap;
 use tantivy_viewer::TantivyValue;
+use tantivy::schema::Schema;
+use tantivy::query::BooleanQuery;
+use tantivy::query::Occur;
+use tantivy::query::TermQuery;
+use tantivy::Term;
+use tantivy::schema::Type;
+use tantivy::query::PhraseQuery;
+use tantivy::query::RangeQuery;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -541,6 +550,80 @@ fn pretty_bytes(h: &Helper, _: &Handlebars, rc: &mut RenderContext) -> Result<()
     }
     rc.writer.write("<invalid argument>".as_bytes())?;
     Ok(())
+}
+
+fn push_term_str(term: &Term, value_type: &Type, allow_quoting: bool, output: &mut String) {
+    match *value_type {
+        Type::Str => {
+            let term_text = term.text();
+            if allow_quoting && term_text.contains(' ') {
+                output.push('"');
+                output.push_str(term_text);
+                output.push('"');
+            } else {
+                output.push_str(term_text)
+            }
+        },
+        Type::U64 => output.push_str(&format!("{}", term.get_u64())),
+        Type::I64 => output.push_str(&format!("{}", term.get_i64())),
+        Type::HierarchicalFacet => output.push_str("<cannot write HierarchicalFacet>"),
+        Type::Bytes => output.push_str("<cannot search for bytes>"),
+    }
+}
+
+fn query_to_string(query: &tantivy::query::Query, schema: &Schema) -> String {
+    let mut output = String::new();
+    push_query_to_string(query, schema, &mut output);
+    output
+}
+
+fn push_query_to_string(query: &tantivy::query::Query, schema: &Schema, output: &mut String) {
+    if let Ok(ref query) = query.downcast_ref::<BooleanQuery>() {
+        let was_empty = output.is_empty();
+        if !was_empty {
+            output.push('(');
+        }
+        for (idx, (occur, clause)) in query.clauses().iter().enumerate() {
+            if idx != 0 {
+                output.push(' ');
+            }
+            let prefix = match occur {
+                Occur::Should => "",
+                Occur::Must => "+",
+                Occur::MustNot => "-",
+            };
+            output.push_str(prefix);
+            push_query_to_string(clause.as_ref(), schema, output);
+        }
+        if !was_empty {
+            output.push(')');
+        }
+    } else if let Ok(ref query) = query.downcast_ref::<TermQuery>() {
+        let term = query.term();
+        let field_obj = query.term().field();
+        let field = schema.get_field_name(field_obj);
+        let value_type = schema.get_field_entry(field_obj).field_type().value_type();
+        output.push_str(field);
+        output.push(':');
+        push_term_str(term, &value_type, true, output);
+    } else if let Ok(ref query) = query.downcast_ref::<PhraseQuery>() {
+        let field = schema.get_field_name(query.field());
+        let value_type = schema.get_field_entry(query.field()).field_type().value_type();
+        let terms = query.phrase_terms();
+        output.push_str(field);
+        output.push_str(":\"");
+        for (idx, term) in terms.iter().enumerate() {
+            if idx != 0 {
+                output.push(' ');
+            }
+            push_term_str(term, &value_type, false, output);
+        }
+        output.push('"');
+    } else if let Ok(query) = query.downcast_ref::<RangeQuery>() {
+        output.push_str("<range query cannot be parsed>");
+    } else {
+        output.push_str(&format!("<unknown query type {:?}>", query));
+    }
 }
 
 fn main() -> Result<(), Error> {
