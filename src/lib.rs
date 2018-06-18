@@ -13,5 +13,3 @@ mod space_usage;
 pub use space_usage::space_usage;
 mod top_terms;
 pub use top_terms::{top_terms, TopTerms, TermCount, TantivyValue};
-mod term_docs;
-pub use term_docs::term_docs;

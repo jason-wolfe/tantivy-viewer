@@ -236,54 +236,6 @@ fn handle_top_terms(req: (HttpRequest<State>, Query<TopTermsQuery>)) -> Result<H
 }
 
 #[derive(Deserialize)]
-struct TermDocsQuery {
-    field: String,
-    term: String,
-}
-
-#[derive(Serialize)]
-struct DocAddress {
-    doc: DocId,
-    segment: String,
-}
-
-#[derive(Serialize)]
-struct TermDocsData {
-    field: String,
-    term: String,
-    term_docs: Vec<DocAddress>,
-    truncated: bool,
-}
-
-fn handle_term_docs(req: (HttpRequest<State>, Query<TermDocsQuery>)) -> Result<HttpResponse, TantivyViewerError> {
-    let (req, params) = req;
-    let state = req.state();
-    let field = params.field.clone();
-    let term = params.term.clone();
-
-    let term_docs = tantivy_viewer::term_docs(&state.index, &field, &term)
-        .map_err(TantivyViewerError::TantivyError)?;
-
-    let num_docs = term_docs.len();
-
-    let term_docs = term_docs.into_iter()
-        .map(|x| DocAddress { doc: x.1, segment: x.0.short_uuid_string() })
-        .take(1000)
-        .collect::<Vec<_>>();
-
-    let truncated = num_docs > term_docs.len();
-
-    let term_docs_data = TermDocsData {
-        field,
-        term,
-        term_docs,
-        truncated,
-    };
-
-    state.render_template("term_docs", &term_docs_data)
-}
-
-#[derive(Deserialize)]
 struct ReconstructQuery {
     field: Option<String>,
     segment: String,
@@ -656,7 +608,6 @@ fn main() -> Result<(), Error> {
             .resource("/space_usage", |r| r.f(handle_space_usage))
             .resource("/configure", |r| r.f(handle_configure))
             .resource("/top_terms", |r| r.method(http::Method::GET).with(handle_top_terms))
-            .resource("/term_docs", |r| r.method(http::Method::GET).with(handle_term_docs))
             .resource("/reconstruct", |r| r.method(http::Method::GET).with(handle_reconstruct))
             .resource("/search", |r| r.method(http::Method::GET).with(handle_search))
     ).bind("0.0.0.0:3000").unwrap().run();
