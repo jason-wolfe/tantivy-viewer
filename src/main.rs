@@ -495,7 +495,7 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 
 #[derive(Deserialize)]
 struct DebugQuery {
-    query: String,
+    query: Option<String>,
     salient_docs_query: Option<String>,
 }
 
@@ -506,6 +506,18 @@ struct DebugTree  {
     search_string: String,
     salient_docs_query_string: Option<String>,
     children: Vec<DebugTree>,
+}
+
+impl DebugTree {
+    fn empty() -> DebugTree {
+        DebugTree {
+            count: 0,
+            query_string: String::new(),
+            search_string: String::new(),
+            salient_docs_query_string: None,
+            children: Vec::new(),
+        }
+    }
 }
 
 fn debug_query(index: &Index, query: &tantivy::query::Query, salient_docs_query: &Option<Box<tantivy::query::Query>>) -> Result<DebugTree, TantivyViewerError> {
@@ -539,7 +551,10 @@ fn debug_query(index: &Index, query: &tantivy::query::Query, salient_docs_query:
 fn handle_debug(req: (HttpRequest<State>, Query<DebugQuery>)) -> Result<HttpResponse, TantivyViewerError> {
     let (req, params) = req;
     let state = req.state();
-    let raw_query = params.query.clone();
+    let raw_query = match params.query {
+        None => return state.render_template("debug", &DebugTree::empty()),
+        Some(ref query) => query.clone(),
+    };
 
     let query_parser = QueryParser::for_index(&state.index, vec![]);
     let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
