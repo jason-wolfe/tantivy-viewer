@@ -12,7 +12,7 @@
         {{#each terms}}
             <tr>
                 <td>{{this.term}}</td>
-                <td><a href="search?query={{../field}}%3A{{this.term}}">{{this.count}}</a></td>
+                <td><a href="search?query={{url_encode ../field}}%3A{{url_encode this.term}}">{{this.count}}</a></td>
             </tr>
         {{/each}}
         </tbody>

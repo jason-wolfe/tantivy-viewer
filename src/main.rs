@@ -13,11 +13,12 @@ extern crate itertools;
 #[macro_use]
 extern crate log;
 extern crate pretty_bytes;
+extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 extern crate tantivy;
-extern crate serde;
+extern crate url;
 
 mod fields;
 mod reconstruct;
@@ -58,6 +59,7 @@ use tantivy::schema::Type;
 use tantivy::query::PhraseQuery;
 use tantivy::query::RangeQuery;
 use tantivy::collector::CountCollector;
+use url::form_urlencoded;
 
 use fields::get_fields;
 use space_usage::space_usage;
@@ -494,29 +496,42 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
 #[derive(Deserialize)]
 struct DebugQuery {
     query: String,
+    salient_docs_query: Option<String>,
 }
 
 #[derive(Serialize)]
 struct DebugTree  {
     count: usize,
     query_string: String,
+    search_string: String,
+    salient_docs_query_string: Option<String>,
     children: Vec<DebugTree>,
 }
 
-fn debug_query(index: &Index, query: &tantivy::query::Query) -> Result<DebugTree, TantivyViewerError> {
+fn debug_query(index: &Index, query: &tantivy::query::Query, salient_docs_query: &Option<Box<tantivy::query::Query>>) -> Result<DebugTree, TantivyViewerError> {
+    let search_query = if let Some(ref salient_docs_query) = salient_docs_query {
+        Box::new(BooleanQuery::from(
+            vec![(Occur::Must, query.box_clone()), (Occur::Must, salient_docs_query.box_clone())]
+        ))
+    } else {
+        query.box_clone()
+    };
+
     let mut collector = CountCollector::default();
     let searcher = index.searcher();
-    query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
+    search_query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
     let count = collector.count();
 
     let children = child_queries(query)?;
     let children = children.into_iter()
-        .map(|q| debug_query(index, &*q))
+        .map(|q| debug_query(index, &*q, salient_docs_query))
         .collect::<Result<Vec<_>, TantivyViewerError>>()?;
 
     Ok(DebugTree {
         count,
         query_string: query_to_string(query, &index.schema()),
+        search_string: query_to_string(&*search_query, &index.schema()),
+        salient_docs_query_string: None,
         children,
     })
 }
@@ -529,7 +544,13 @@ fn handle_debug(req: (HttpRequest<State>, Query<DebugQuery>)) -> Result<HttpResp
     let query_parser = QueryParser::for_index(&state.index, vec![]);
     let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
 
-    let data = debug_query(&state.index, &*query)?;
+    let raw_salient_docs_query = params.salient_docs_query.clone();
+    let salient_docs_query = raw_salient_docs_query
+        .map(|q| query_parser.parse_query(&q).map_err(TantivyViewerError::QueryParserError))
+        .transpose()?;
+
+    let mut data = debug_query(&state.index, &*query, &salient_docs_query)?;
+    data.salient_docs_query_string = params.salient_docs_query.clone();
 
     state.render_template("debug", &data)
 }
@@ -567,6 +588,17 @@ fn pretty_bytes(h: &Helper, _: &Handlebars, rc: &mut RenderContext) -> Result<()
     }
     rc.writer.write("<invalid argument>".as_bytes())?;
     Ok(())
+}
+
+fn url_encode(h: &Helper, _: &Handlebars, rc: &mut RenderContext) -> Result<(), RenderError> {
+    if let Some(param) = h.param(0) {
+        if let Some(param) = param.value().as_str() {
+            let encoded: String = form_urlencoded::byte_serialize(param.as_bytes()).collect();
+            rc.writer.write(encoded.as_bytes())?;
+            return Ok(());
+        }
+    }
+    Err(RenderError::new("Invalid argument to url_encode. Expected string."))
 }
 
 struct UnknownQueryTypeError;
@@ -670,6 +702,7 @@ fn main() -> Result<(), Error> {
 
     let mut handlebars = Handlebars::new();
     handlebars.register_helper("pretty_bytes", Box::new(pretty_bytes));
+    handlebars.register_helper("url_encode", Box::new(url_encode));
     for entry in fs::read_dir("./templates")? {
         let entry = entry?;
         let filename = entry.file_name();

@@ -28,7 +28,7 @@
             {{#each this.[1]}}
                 <tr>
                     <td>
-                        <a href="reconstruct?segment={{../this.[0]}}&doc={{this.[0]}}">({{../this.[0]}}, {{this.[0]}})</a>
+                        <a href="reconstruct?segment={{url_encode ../this.[0]}}&doc={{this.[0]}}">({{../this.[0]}}, {{this.[0]}})</a>
                     </td>
                     {{#each this.[1]}}
                         <td>

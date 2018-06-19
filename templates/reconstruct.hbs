@@ -14,7 +14,7 @@
         </tbody>
     </table>
     {{#unless all_fields}}
-        <a href="reconstruct?segment={{segment}}&doc={{doc}}" role="button" class="btn btn-primary btn-lg">
+        <a href="reconstruct?segment={{url_encode segment}}&doc={{doc}}" role="button" class="btn btn-primary btn-lg">
             Reconstruct all fields
         </a>
     {{/unless}}

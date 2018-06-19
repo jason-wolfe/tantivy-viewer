@@ -12,7 +12,7 @@
         <tbody>
         {{#each this}}
             <tr>
-                <td><a href="top_terms?field={{name}}">{{name}}</a></td>
+                <td><a href="top_terms?field={{url_encode name}}">{{name}}</a></td>
                 <td>{{value_type}}</td>
                 <td>{{extra_options}}</td>
             </tr>

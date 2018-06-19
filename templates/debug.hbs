@@ -1,16 +1,48 @@
 {{#*inline "contents"}}
-    <div class="accordion">
-        <div class="card">
+    {{#unless nested}}
+        <form action="debug" class="m-3">
+            <div class="form-row mb-3">
+                <div class="col-6">
+                    <label class="sr-only" for="query">Query</label>
+                    <textarea class="form-control" name="query" id="query" rows="3" placeholder="Query. e.g., field:word">{{query_string}}</textarea>
+                </div>
+                <div class="col-6">
+                    <label class="sr-only" for="salient_docs_query">Salient Docs Query</label>
+                    <textarea class="form-control" name="salient_docs_query" id="salient_docs_query" rows="3" placeholder="Salient docs query, to subset the results. e.g., id:123">{{salient_docs_query_string}}</textarea>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="col-4"></div>
+                <div class="col-4 align-self-center">
+                    <button type="submit" class="btn btn-block btn-primary">Debug It</button>
+                </div>
+            </div>
+        </form>
+
+        <h1>
+            Documents matching query <br/>
+            <code>{{query_string}}</code><br/>
+            {{#if salient_docs_query_string}}
+                focusing on the subset matching <br/>
+                <code>{{salient_docs_query_string}}</code>
+            {{/if}}
+        </h1>
+    {{/unless}}
+
+    <div class="card">
+        <div class="card-body pl-5">
             <div class="card-header">
-                <h5><code>{{query_string}}</code> -- {{count}}</h5>
+                <h5><code><a href="search?query={{url_encode search_string}}">{{query_string}}</a></code> -- {{count}}</h5>
             </div>
 
-            <div class="pl-5">
-                {{#each children}}
-                    {{> debug }}
-                {{/each}}
-            </div>
+            {{#each children}}
+                {{> debug nested=true}}
+            {{/each}}
         </div>
     </div>
 {{/inline}}
-{{~> skeleton~}}
+{{#if nested}}
+    {{~> contents }}
+{{else}}
+    {{~> skeleton~}}
+{{/if}}
