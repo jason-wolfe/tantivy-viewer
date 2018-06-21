@@ -561,6 +561,7 @@ fn handle_debug(req: (HttpRequest<State>, Query<DebugQuery>)) -> Result<HttpResp
 
     let raw_salient_docs_query = params.salient_docs_query.clone();
     let salient_docs_query = raw_salient_docs_query
+        .filter(|x| !x.is_empty())
         .map(|q| query_parser.parse_query(&q).map_err(TantivyViewerError::QueryParserError))
         .transpose()?;
 
