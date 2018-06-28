@@ -7,12 +7,12 @@ use tantivy::space_usage::ByteCount;
 fn add_fields(schema: &Schema, accum: &mut HashMap<String, usize>, usage: &PerFieldSpaceUsage) {
     for (field, usage) in usage.fields() {
         let name = schema.get_field_name(*field).to_string();
-        *accum.entry(name).or_insert(0) += usage.total().0;
+        *accum.entry(name).or_insert(0) += usage.total();
     }
 }
 
 fn add_concept(accum: &mut HashMap<String, usize>, key: &str, space: ByteCount) {
-    *accum.entry(key.to_string()).or_insert(0) += space.0;
+    *accum.entry(key.to_string()).or_insert(0) += space;
 }
 
 #[derive(Serialize)]
@@ -27,7 +27,7 @@ pub fn space_usage(index: &Index) -> SpaceUsage {
     let searcher = index.searcher();
     let space_usage = searcher.space_usage();
 
-    let total = space_usage.total().0;
+    let total = space_usage.total();
     let mut fields = HashMap::new();
     let mut concepts = HashMap::new();
 

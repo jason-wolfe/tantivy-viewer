@@ -68,6 +68,7 @@ use top_terms::TantivyValue;
 use reconstruct::reconstruct_one;
 use reconstruct::reconstruct;
 use tantivy::query::AllQuery;
+use std::collections::Bound;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -140,7 +141,7 @@ fn handle_index(req: HttpRequest<State>) -> Result<HttpResponse, TantivyViewerEr
         fields,
         segments: segments.into_iter().map(|x| x.short_uuid_string()).collect(),
         num_fields,
-        total_usage: space_usage.total().0,
+        total_usage: space_usage.total(),
     };
 
     state.render_template("index", &data)
@@ -701,10 +702,36 @@ fn push_query_to_string(query: &tantivy::query::Query, schema: &Schema, output: 
             push_term_str(term, &value_type, false, output);
         }
         output.push('"');
-    } else if let Ok(_query) = query.downcast_ref::<RangeQuery>() {
-        output.push_str("<range query cannot be parsed>");
+    } else if let Ok(query) = query.downcast_ref::<RangeQuery>() {
+        let field = schema.get_field_name(query.field());
+        let value_type = schema.get_field_entry(query.field()).field_type().value_type();
+        output.push_str(field);
+        output.push(':');
+        match query.left_bound() {
+            Bound::Included(term) => {
+                output.push('[');
+                push_term_str(&term, &value_type, false, output);
+            },
+            Bound::Excluded(term) => {
+                output.push('{');
+                push_term_str(&term, &value_type, false, output);
+            },
+            Bound::Unbounded => output.push('['),
+        }
+        output.push_str(" TO ");
+        match query.right_bound() {
+            Bound::Included(term) => {
+                push_term_str(&term, &value_type, false, output);
+                output.push(']');
+            },
+            Bound::Excluded(term) => {
+                push_term_str(&term, &value_type, false, output);
+                output.push('}');
+            },
+            Bound::Unbounded => output.push(']'),
+        }
     } else if let Ok(_query) = query.downcast_ref::<AllQuery>() {
-        output.push_str("<all query cannot be parsed>");
+        output.push_str("*");
     } else {
         output.push_str(&format!("<unknown query type {:?}>", query));
     }
