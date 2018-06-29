@@ -22,5 +22,5 @@ serde_json = "1.0.17"
 url = "1.7.0"
 
 [dependencies.tantivy]
-branch = "281-space-usage"
 git = "https://github.com/tantivy-search/tantivy.git"
+rev = "0d6ca4186d0bb27daf8509088b23639c267cf5ac"
