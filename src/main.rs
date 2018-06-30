@@ -58,7 +58,6 @@ use tantivy::Term;
 use tantivy::schema::Type;
 use tantivy::query::PhraseQuery;
 use tantivy::query::RangeQuery;
-use tantivy::collector::CountCollector;
 use url::form_urlencoded;
 
 use fields::get_fields;
@@ -69,6 +68,10 @@ use reconstruct::reconstruct_one;
 use reconstruct::reconstruct;
 use tantivy::query::AllQuery;
 use std::collections::Bound;
+use tantivy::Searcher;
+use tantivy::SegmentLocalId;
+use tantivy::query::Scorer;
+use tantivy::fastfield::DeleteBitSet;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -418,6 +421,61 @@ impl SearchData {
     }
 }
 
+trait QueryExt {
+    fn collect_first_k(&self, searcher: &Searcher, collector: &mut Collector, k: usize) -> tantivy::Result<()>;
+}
+
+impl<Q: tantivy::query::Query> QueryExt for Q {
+    fn collect_first_k(&self, searcher: &Searcher, collector: &mut Collector, k: usize) -> tantivy::Result<()> {
+        let scoring_enabled = collector.requires_scoring();
+        let weight = self.weight(searcher, scoring_enabled)?;
+        let mut remaining = k;
+        for (segment_ord, segment_reader) in searcher.segment_readers().iter().enumerate() {
+            collector.set_segment(segment_ord as SegmentLocalId, segment_reader)?;
+            let mut scorer = weight.scorer(segment_reader)?;
+            remaining -= segment_collect_first_k(&mut scorer, collector, segment_reader.delete_bitset(), remaining);
+        }
+        Ok(())
+    }
+}
+
+trait CollectorExt : Collector + Sized {
+    fn collect_first_k(&mut self, searcher: &Searcher, query: &tantivy::query::Query, k: usize) -> tantivy::Result<()> {
+        let scoring_enabled = self.requires_scoring();
+        let weight = query.weight(searcher, scoring_enabled)?;
+        let mut remaining = k;
+        for (segment_ord, segment_reader) in searcher.segment_readers().iter().enumerate() {
+            self.set_segment(segment_ord as SegmentLocalId, segment_reader)?;
+            let mut scorer = weight.scorer(segment_reader)?;
+            remaining -= segment_collect_first_k(&mut scorer, &mut *self, segment_reader.delete_bitset(), remaining);
+        }
+        Ok(())
+    }
+}
+
+impl<C: Collector + Sized> CollectorExt for C {
+
+}
+
+fn segment_collect_first_k<S: Scorer>(scorer: &mut S, collector: &mut Collector, delete_bitset_opt: Option<&DeleteBitSet>, k: usize) -> usize {
+    let mut remaining = k;
+    if let Some(delete_bitset) = delete_bitset_opt {
+        while remaining > 0 && scorer.advance() {
+            let doc = scorer.doc();
+            if !delete_bitset.is_deleted(doc) {
+                remaining -= 1;
+                collector.collect(doc, scorer.score());
+            }
+        }
+    } else {
+        while remaining > 0 && scorer.advance() {
+            remaining -= 1;
+            collector.collect(scorer.doc(), scorer.score());
+        }
+    }
+    remaining
+}
+
 fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpResponse, TantivyViewerError> {
     let (req, params) = req;
     let state = req.state();
@@ -426,18 +484,20 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
         Some(ref query) => query.clone(),
     };
 
+    let limit = 1000;
+
     let query_parser = QueryParser::for_index(&state.index, vec![]);
     let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
 
     let searcher = state.index.searcher();
     let mut collector = DocCollector::new();
-    query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
+    collector.collect_first_k(&*searcher, &*query, limit + 1).map_err(TantivyViewerError::TantivyError)?;
 
     let docs = collector.into_docs();
 
     let identifying_fields = get_identifying_fields(&req);
 
-    let mut remaining = 1000;
+    let mut remaining = limit;
     let mut docs_to_reconstruct = HashMap::new();
     let mut truncated = false;
     for (segment, docs) in docs.into_iter() {
@@ -530,10 +590,8 @@ fn debug_query(index: &Index, query: &tantivy::query::Query, salient_docs_query:
         query.box_clone()
     };
 
-    let mut collector = CountCollector::default();
     let searcher = index.searcher();
-    search_query.search(&*searcher, &mut collector).map_err(TantivyViewerError::TantivyError)?;
-    let count = collector.count();
+    let count = search_query.count(&*searcher).map_err(TantivyViewerError::TantivyError)?;
 
     let children = child_queries(query)?;
     let children = children.into_iter()
