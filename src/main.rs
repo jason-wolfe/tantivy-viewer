@@ -20,6 +20,7 @@ extern crate serde_json;
 extern crate tantivy;
 extern crate url;
 
+mod debug;
 mod fields;
 mod reconstruct;
 mod space_usage;
@@ -64,7 +65,6 @@ use fields::get_fields;
 use space_usage::space_usage;
 use top_terms::top_terms;
 use top_terms::TantivyValue;
-use reconstruct::reconstruct_one;
 use reconstruct::reconstruct;
 use tantivy::query::AllQuery;
 use std::collections::Bound;
@@ -72,6 +72,8 @@ use tantivy::Searcher;
 use tantivy::SegmentLocalId;
 use tantivy::query::Scorer;
 use tantivy::fastfield::DeleteBitSet;
+use reconstruct::handle_reconstruct;
+use debug::handle_debug;
 
 #[derive(Fail, Debug)]
 enum TantivyViewerError {
@@ -263,90 +265,10 @@ fn handle_top_terms(req: (HttpRequest<State>, Query<TopTermsQuery>)) -> Result<H
     state.render_template("top_terms", &data)
 }
 
-#[derive(Deserialize)]
-struct ReconstructQuery {
-    field: Option<String>,
-    segment: String,
-    doc: DocId,
-}
-
-#[derive(Serialize)]
-struct ReconstructEntry {
-    field: String,
-    contents: String,
-}
-
-#[derive(Serialize)]
-struct ReconstructData {
-    segment: String,
-    doc: DocId,
-    all_fields: bool,
-    entries: Vec<ReconstructEntry>,
-}
-
-fn find_segment(index: &Index, segment_str: &str) -> Result<Option<SegmentId>, tantivy::Error> {
-    for segment_id in index.searchable_segment_ids()?.into_iter() {
-        if segment_id.uuid_string().starts_with(segment_str) {
-            return Ok(Some(segment_id));
-        }
-    }
-    Ok(None)
-}
-
 fn stringify_values(values: Vec<Option<TantivyValue>>) -> String {
     values.into_iter()
         .map(|opt| opt.map(|x| format!("{} ", x)).unwrap_or_default())
         .collect()
-}
-
-fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, Error> {
-    let segment = find_segment(index, segment)
-        .map_err(TantivyViewerError::TantivyError)?
-        .ok_or(TantivyViewerError::SegmentNotFoundError)?;
-    Ok(
-        stringify_values(reconstruct_one(index, field, segment, doc)?)
-    )
-}
-
-fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, Error> {
-    let (req, params) = req;
-    let state = req.state();
-    let field = params.field.clone();
-    let segment = params.segment.clone();
-    let doc = params.doc;
-
-    let mut fields = Vec::new();
-    let all_fields = field.is_none();
-    if let Some(field) = field {
-        // Reconstruct a specific field
-        fields.push(field);
-    } else {
-        // Reconstruct all fields
-        let schema = state.index.schema();
-        fields.extend(schema.fields().iter().map(|x| x.name().to_string()));
-    }
-
-    fields.sort();
-
-    let mut all_reconstructed = Vec::new();
-
-    for field in fields {
-        let contents = reconstruct_to_string(&state.index, &field, &segment, doc)?;
-
-        all_reconstructed.push(ReconstructEntry {
-            field,
-            contents
-        });
-    }
-
-    let data = ReconstructData {
-        segment,
-        doc,
-        all_fields,
-        entries: all_reconstructed,
-    };
-
-    Ok(state.render_template("reconstruct", &data)?)
 }
 
 #[derive(Deserialize)]
@@ -549,82 +471,6 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
     };
 
     Ok(state.render_template("search", &data)?)
-}
-
-#[derive(Deserialize)]
-struct DebugQuery {
-    query: Option<String>,
-    salient_docs_query: Option<String>,
-}
-
-#[derive(Serialize)]
-struct DebugTree  {
-    count: usize,
-    query_string: String,
-    search_string: String,
-    salient_docs_query_string: Option<String>,
-    children: Vec<DebugTree>,
-}
-
-impl DebugTree {
-    fn empty() -> DebugTree {
-        DebugTree {
-            count: 0,
-            query_string: String::new(),
-            search_string: String::new(),
-            salient_docs_query_string: None,
-            children: Vec::new(),
-        }
-    }
-}
-
-fn debug_query(index: &Index, query: &tantivy::query::Query, salient_docs_query: &Option<Box<tantivy::query::Query>>) -> Result<DebugTree, TantivyViewerError> {
-    let search_query = if let Some(ref salient_docs_query) = salient_docs_query {
-        Box::new(BooleanQuery::from(
-            vec![(Occur::Must, query.box_clone()), (Occur::Must, salient_docs_query.box_clone())]
-        ))
-    } else {
-        query.box_clone()
-    };
-
-    let searcher = index.searcher();
-    let count = search_query.count(&*searcher).map_err(TantivyViewerError::TantivyError)?;
-
-    let children = child_queries(query)?;
-    let children = children.into_iter()
-        .map(|q| debug_query(index, &*q, salient_docs_query))
-        .collect::<Result<Vec<_>, TantivyViewerError>>()?;
-
-    Ok(DebugTree {
-        count,
-        query_string: query_to_string(query, &index.schema()),
-        search_string: query_to_string(&*search_query, &index.schema()),
-        salient_docs_query_string: None,
-        children,
-    })
-}
-
-fn handle_debug(req: (HttpRequest<State>, Query<DebugQuery>)) -> Result<HttpResponse, TantivyViewerError> {
-    let (req, params) = req;
-    let state = req.state();
-    let raw_query = match params.query {
-        None => return state.render_template("debug", &DebugTree::empty()),
-        Some(ref query) => query.clone(),
-    };
-
-    let query_parser = QueryParser::for_index(&state.index, vec![]);
-    let query = query_parser.parse_query(&raw_query).map_err(TantivyViewerError::QueryParserError)?;
-
-    let raw_salient_docs_query = params.salient_docs_query.clone();
-    let salient_docs_query = raw_salient_docs_query
-        .filter(|x| !x.is_empty())
-        .map(|q| query_parser.parse_query(&q).map_err(TantivyViewerError::QueryParserError))
-        .transpose()?;
-
-    let mut data = debug_query(&state.index, &*query, &salient_docs_query)?;
-    data.salient_docs_query_string = params.salient_docs_query.clone();
-
-    state.render_template("debug", &data)
 }
 
 struct State {

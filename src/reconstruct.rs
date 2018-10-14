@@ -16,6 +16,12 @@ use std::collections::HashMap;
 use tantivy::SegmentId;
 use tantivy::postings::SegmentPostings;
 use tantivy::schema::Type;
+use TantivyViewerError;
+use stringify_values;
+use actix_web::HttpRequest;
+use State;
+use actix_web::Query;
+use actix_web::HttpResponse;
 
 trait FieldTypeExt {
     fn is_fast(&self) -> bool;
@@ -155,4 +161,84 @@ fn reconstruct_numeric<T: FastValue + Into<TantivyValue>>(segment: &SegmentReade
     }
 
     Ok(())
+}
+
+fn find_segment(index: &Index, segment_str: &str) -> Result<Option<SegmentId>, tantivy::Error> {
+    for segment_id in index.searchable_segment_ids()?.into_iter() {
+        if segment_id.uuid_string().starts_with(segment_str) {
+            return Ok(Some(segment_id));
+        }
+    }
+    Ok(None)
+}
+
+fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, Error> {
+    let segment = find_segment(index, segment)
+        .map_err(TantivyViewerError::TantivyError)?
+        .ok_or(TantivyViewerError::SegmentNotFoundError)?;
+    Ok(
+        stringify_values(reconstruct_one(index, field, segment, doc)?)
+    )
+}
+
+#[derive(Deserialize)]
+pub struct ReconstructQuery {
+    field: Option<String>,
+    segment: String,
+    doc: DocId,
+}
+
+#[derive(Serialize)]
+pub struct ReconstructEntry {
+    field: String,
+    contents: String,
+}
+
+#[derive(Serialize)]
+pub struct ReconstructData {
+    segment: String,
+    doc: DocId,
+    all_fields: bool,
+    entries: Vec<ReconstructEntry>,
+}
+
+pub(crate) fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, Error> {
+    let (req, params) = req;
+    let state = req.state();
+    let field = params.field.clone();
+    let segment = params.segment.clone();
+    let doc = params.doc;
+
+    let mut fields = Vec::new();
+    let all_fields = field.is_none();
+    if let Some(field) = field {
+        // Reconstruct a specific field
+        fields.push(field);
+    } else {
+        // Reconstruct all fields
+        let schema = state.index.schema();
+        fields.extend(schema.fields().iter().map(|x| x.name().to_string()));
+    }
+
+    fields.sort();
+
+    let mut all_reconstructed = Vec::new();
+
+    for field in fields {
+        let contents = reconstruct_to_string(&state.index, &field, &segment, doc)?;
+
+        all_reconstructed.push(ReconstructEntry {
+            field,
+            contents
+        });
+    }
+
+    let data = ReconstructData {
+        segment,
+        doc,
+        all_fields,
+        entries: all_reconstructed,
+    };
+
+    Ok(state.render_template("reconstruct", &data)?)
 }
