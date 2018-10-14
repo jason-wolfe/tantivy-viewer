@@ -1,5 +1,6 @@
+use failure::err_msg;
+use failure::Error;
 use tantivy::Index;
-use tantivy::Result;
 use tantivy::schema::IndexRecordOption;
 use tantivy::DocSet;
 use tantivy::DocId;
@@ -32,16 +33,16 @@ impl FieldTypeExt for FieldType {
     }
 }
 
-pub fn reconstruct_one(index: &Index, field: &str, segment: SegmentId, doc: DocId) -> Result<Vec<Option<TantivyValue>>> {
+pub fn reconstruct_one(index: &Index, field: &str, segment: SegmentId, doc: DocId) -> Result<Vec<Option<TantivyValue>>, Error> {
     let mut segment_to_doc = HashMap::new();
     segment_to_doc.insert(segment, vec![doc]);
     let mut result_map = reconstruct(index, field, &segment_to_doc)?;
     Ok(result_map.remove(&segment).unwrap().pop().unwrap().1)
 }
 
-pub fn reconstruct(index: &Index, field: &str, docs: &HashMap<SegmentId, Vec<DocId>>) -> Result<HashMap<SegmentId, Vec<(DocId, Vec<Option<TantivyValue>>)>>> {
+pub fn reconstruct(index: &Index, field: &str, docs: &HashMap<SegmentId, Vec<DocId>>) -> Result<HashMap<SegmentId, Vec<(DocId, Vec<Option<TantivyValue>>)>>, Error> {
     let schema = index.schema();
-    let field = schema.get_field(field).ok_or("Field not found")?;
+    let field = schema.get_field(field).ok_or(err_msg("Field not found"))?;
     let field_type = schema.get_field_entry(field).field_type();
     let value_type = field_type.value_type();
     let options = field_type.get_index_record_option().unwrap_or(IndexRecordOption::WithFreqsAndPositions);
@@ -136,7 +137,7 @@ fn reconstruct_doc(output: &mut Vec<Option<TantivyValue>>, positions_buf: &mut V
     }
 }
 
-fn reconstruct_numeric<T: FastValue + Into<TantivyValue>>(segment: &SegmentReader, doc: DocId, field: Field, cardinality: Option<Cardinality>, output: &mut Vec<Option<TantivyValue>>) -> Result<()> {
+fn reconstruct_numeric<T: FastValue + Into<TantivyValue>>(segment: &SegmentReader, doc: DocId, field: Field, cardinality: Option<Cardinality>, output: &mut Vec<Option<TantivyValue>>) -> Result<(), Error> {
     match cardinality {
         Some(Cardinality::SingleValue) => {
             let reader = segment.fast_field_reader::<T>(field)?;

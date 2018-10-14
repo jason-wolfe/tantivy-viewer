@@ -23,4 +23,4 @@ url = "1.7.0"
 
 [dependencies.tantivy]
 git = "https://github.com/tantivy-search/tantivy.git"
-rev = "0d6ca4186d0bb27daf8509088b23639c267cf5ac"
+rev = "9764e0fda475ca9f02ca609eb594493bed630506"

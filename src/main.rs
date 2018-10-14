@@ -299,19 +299,16 @@ fn stringify_values(values: Vec<Option<TantivyValue>>) -> String {
         .collect()
 }
 
-fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, TantivyViewerError> {
+fn reconstruct_to_string(index: &Index, field: &str, segment: &str, doc: DocId) -> Result<String, Error> {
     let segment = find_segment(index, segment)
         .map_err(TantivyViewerError::TantivyError)?
         .ok_or(TantivyViewerError::SegmentNotFoundError)?;
     Ok(
-        stringify_values(
-            reconstruct_one(index, field, segment, doc)
-            .map_err(TantivyViewerError::TantivyError)?
-        )
+        stringify_values(reconstruct_one(index, field, segment, doc)?)
     )
 }
 
-fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Result<HttpResponse, Error> {
     let (req, params) = req;
     let state = req.state();
     let field = params.field.clone();
@@ -349,7 +346,7 @@ fn handle_reconstruct(req: (HttpRequest<State>, Query<ReconstructQuery>)) -> Res
         entries: all_reconstructed,
     };
 
-    state.render_template("reconstruct", &data)
+    Ok(state.render_template("reconstruct", &data)?)
 }
 
 #[derive(Deserialize)]
@@ -476,11 +473,11 @@ fn segment_collect_first_k<S: Scorer>(scorer: &mut S, collector: &mut Collector,
     remaining
 }
 
-fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpResponse, TantivyViewerError> {
+fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpResponse, Error> {
     let (req, params) = req;
     let state = req.state();
     let raw_query = match params.query {
-        None => return state.render_template("search", &SearchData::empty()),
+        None => return Ok(state.render_template("search", &SearchData::empty())?),
         Some(ref query) => query.clone(),
     };
 
@@ -551,7 +548,7 @@ fn handle_search(req: (HttpRequest<State>, Query<SearchQuery>)) -> Result<HttpRe
         truncated,
     };
 
-    state.render_template("search", &data)
+    Ok(state.render_template("search", &data)?)
 }
 
 #[derive(Deserialize)]

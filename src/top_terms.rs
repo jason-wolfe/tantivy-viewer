@@ -1,3 +1,5 @@
+use failure::err_msg;
+use failure::Error;
 use tantivy::schema::Type;
 use tantivy::Term;
 use tantivy::schema::Field;
@@ -7,7 +9,6 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str;
 use tantivy::Index;
-use tantivy::Result;
 use std::collections::BinaryHeap;
 use std::collections::binary_heap::PeekMut;
 
@@ -102,9 +103,9 @@ impl<'a, A: Automaton> PartialEq for StreamerWrapper<'a, A> {
 
 impl<'a, A: Automaton> Eq for StreamerWrapper<'a, A> {}
 
-pub fn top_terms(index: &Index, field: &str, k: usize) -> Result<TopTerms> {
+pub fn top_terms(index: &Index, field: &str, k: usize) -> Result<TopTerms, Error> {
     let searcher = index.searcher();
-    let field = index.schema().get_field(field).ok_or("Sorry, that field does not exist!")?;
+    let field = index.schema().get_field(field).ok_or(err_msg("Sorry, that field does not exist!"))?;
     let value_type = index.schema().get_field_entry(field).field_type().value_type();
     let indexes = searcher.segment_readers().iter().map(|x| x.inverted_index(field)).collect::<Vec<_>>();
 
